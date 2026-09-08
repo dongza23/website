@@ -6924,7 +6924,22 @@ function showImportPreview(){
 function drawImportPane(){
   const body=document.getElementById('mBody');
   const impCount = USER.filter(t=>t._imp||t.batch==='imp').length;
+  const fbUser = (window._fbCurrentUser)||null;
   body.innerHTML=`
+   <div class="card panel" style="border:1px solid var(--border);margin-bottom:16px">
+     <div class="card-head"><h3>☁️ 클라우드 자동저장 (Firebase)</h3></div>
+     <p class="hint" style="margin:0 0 14px">구글 계정으로 로그인하면 모든 데이터(거래·거래처·임대·설정)가 <b>변경될 때마다 자동으로 클라우드에 저장</b>되고, 다른 기기에서 같은 계정으로 로그인하면 이어서 볼 수 있습니다.</p>
+     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+       ${fbUser
+         ? `<span style="padding:8px 14px;border-radius:8px;background:#E2EFDA;color:#375623;font-weight:600">✓ 로그인됨: ${fbUser.email}</span>
+            <button class="btn" id="fbLogoutBtn">로그아웃</button>
+            <button class="btn" id="fbSaveBtn" style="background:#14524a;color:#fff;border:0">지금 저장</button>
+            <button class="btn" id="fbLoadBtn">클라우드에서 불러오기</button>`
+         : `<button class="btn primary" id="fbGoogleBtn" style="background:#14524a;color:#fff;border:0;font-weight:600">🔑 구글로 로그인</button>
+            <span class="hint" style="margin:0">로그인 안 하면 이 기기에만 저장됩니다</span>`
+       }
+     </div>
+   </div>
    <div class="card panel">
      <div class="card-head"><h3>엑셀 가져오기</h3></div>
      <p class="hint" style="margin:0 0 14px">과거 매출(발주) 내역이 담긴 엑셀(.xlsx/.xls/.csv)을 올리면, 열을 맞춰 거래로 일괄 등록합니다.</p>
@@ -6937,6 +6952,12 @@ function drawImportPane(){
        <button class="btn danger sm" id="impClearAll">가져오기 거래 일괄 삭제</button>
      </div>`:''}
    </div>`;
+  // 클라우드 저장 버튼 이벤트
+  const gBtn=document.getElementById('fbGoogleBtn'); if(gBtn) gBtn.onclick=()=>{ if(window.fbGoogleLogin) window.fbGoogleLogin(); };
+  const loBtn=document.getElementById('fbLogoutBtn'); if(loBtn) loBtn.onclick=()=>{ if(window.fbLogout) window.fbLogout(); };
+  const svBtn=document.getElementById('fbSaveBtn'); if(svBtn) svBtn.onclick=()=>{ if(window.fbSaveNow) window.fbSaveNow(); };
+  const ldBtn=document.getElementById('fbLoadBtn'); if(ldBtn) ldBtn.onclick=()=>{ if(window.fbLoadNow) window.fbLoadNow(); };
+
   document.getElementById('inXlsx').onclick=()=>document.getElementById('inXlsxFile').click();
   document.getElementById('inXlsxFile').onchange=onXlsxPick;
   const clearBtn=document.getElementById('impClearAll');
@@ -11057,14 +11078,12 @@ function thinBorder(){
 /* ===== 기기 재고현황 모듈 끝 ===== */
 </script>
 
-<!-- ===== Firebase 클라우드 자동저장 모듈 ===== -->
+<!-- ===== Firebase 클라우드 자동저장 모듈 (구글 로그인) ===== -->
 <script type="module">
-  // Firebase SDK (최신 v11)
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
-  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
+  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
   import { getFirestore, doc, setDoc, getDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
-  // ▼▼▼ 여기에 본인 Firebase 프로젝트 설정을 붙여넣으세요 ▼▼▼
   const firebaseConfig = {
     apiKey: "AIzaSyBMlcch2V6-qMxPLl2g7NdxNpaSyZpvE54",
     authDomain: "dongza23-ce05f.firebaseapp.com",
@@ -11074,147 +11093,80 @@ function thinBorder(){
     appId: "1:142527956714:web:16b16ea47c29c3401ab993",
     measurementId: "G-R1RQ4YFJ2Y"
   };
-  // ▲▲▲ 여기까지 ▲▲▲
 
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
-
-  // 공유 문서 경로: 모든 직원이 같은 데이터 공유 (회사 1개 데이터셋)
+  const provider = new GoogleAuthProvider();
   const DATA_DOC = doc(db, 'supionm', 'shared_data');
 
-  let _fbReady = false;
-  let _saveTimer = null;
-  let _applyingRemote = false;  // 원격 데이터 적용 중엔 자동저장 안 함(무한루프 방지)
+  let _fbReady=false, _saveTimer=null, _applyingRemote=false;
+  window._fbCurrentUser = null;
 
-  // ── localStorage의 sci_ 키 전부 모으기 ──
   function collectLocalData(){
-    const ls = {};
-    for(let i=0;i<localStorage.length;i++){
-      const k = localStorage.key(i);
-      if(k && k.indexOf('sci_')===0) ls[k] = localStorage.getItem(k);
-    }
+    const ls={};
+    for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.indexOf('sci_')===0) ls[k]=localStorage.getItem(k); }
     return ls;
   }
-
-  // ── 파이어베이스 → localStorage 적용 ──
   function applyRemoteData(ls){
-    if(!ls) return;
-    _applyingRemote = true;
+    if(!ls) return; _applyingRemote=true;
     try{
-      // 기존 sci_ 키 지우고
-      const toDel=[];
-      for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.indexOf('sci_')===0) toDel.push(k); }
+      const toDel=[]; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.indexOf('sci_')===0) toDel.push(k); }
       toDel.forEach(k=>localStorage.removeItem(k));
-      // 원격 데이터로 채우기
-      Object.keys(ls).forEach(k=>{ if(ls[k]!=null) localStorage.setItem(k, String(ls[k])); });
-    }catch(e){ console.error('원격적용 오류', e); }
-    _applyingRemote = false;
+      Object.keys(ls).forEach(k=>{ if(ls[k]!=null) localStorage.setItem(k,String(ls[k])); });
+    }catch(e){ console.error(e); } _applyingRemote=false;
   }
-
-  // ── localStorage → 파이어베이스 저장 (디바운스 2초) ──
   function scheduleSave(){
-    if(!_fbReady || _applyingRemote) return;
+    if(!_fbReady||_applyingRemote) return;
     if(_saveTimer) clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(async()=>{
-      try{
-        const ls = collectLocalData();
-        await setDoc(DATA_DOC, { ls: ls, updatedAt: Date.now(), updatedBy: (auth.currentUser?auth.currentUser.email:'') }, { merge:false });
-        showFbStatus('저장됨 ✓', '#1a7f37');
-      }catch(e){ console.error('저장 오류', e); showFbStatus('저장 실패', '#c0392b'); }
-    }, 2000);
+    _saveTimer=setTimeout(async()=>{
+      try{ await setDoc(DATA_DOC,{ls:collectLocalData(),updatedAt:Date.now(),updatedBy:(auth.currentUser?auth.currentUser.email:'')},{merge:false}); showFbStatus('저장됨 ✓','#1a7f37'); }
+      catch(e){ console.error(e); showFbStatus('저장 실패','#c0392b'); }
+    },2000);
+  }
+  function showFbStatus(msg,color){
+    let el=document.getElementById('fbStatus');
+    if(!el){ el=document.createElement('div'); el.id='fbStatus'; el.style.cssText='position:fixed;right:14px;bottom:14px;z-index:99999;padding:6px 14px;border-radius:16px;font-size:12px;font-weight:600;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:opacity .3s'; document.body.appendChild(el); }
+    el.textContent='☁ '+msg; el.style.color=color||'#555'; el.style.opacity='1';
+    clearTimeout(el._t); el._t=setTimeout(()=>{el.style.opacity='0.35';},2500);
   }
 
-  // ── 상태 표시 (우하단) ──
-  function showFbStatus(msg, color){
-    let el = document.getElementById('fbStatus');
-    if(!el){
-      el = document.createElement('div'); el.id='fbStatus';
-      el.style.cssText='position:fixed;right:14px;bottom:14px;z-index:99999;padding:6px 14px;border-radius:16px;font-size:12px;font-weight:600;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:opacity .3s';
-      document.body.appendChild(el);
-    }
-    el.textContent = '☁ '+msg; el.style.color = color||'#555'; el.style.opacity='1';
-    clearTimeout(el._t); el._t=setTimeout(()=>{ el.style.opacity='0.4'; }, 2500);
-  }
-
-  // ── 로그인 화면 ──
-  function showLogin(){
-    const ov = document.createElement('div'); ov.id='fbLogin';
-    ov.style.cssText='position:fixed;inset:0;z-index:100000;background:#f4f4f6;display:flex;align-items:center;justify-content:center';
-    ov.innerHTML = `
-      <div style="background:#fff;padding:40px;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.12);width:340px;text-align:center">
-        <h2 style="margin:0 0 6px;color:#14524a">수피오엔엠 재고관리</h2>
-        <p style="color:#888;font-size:13px;margin:0 0 24px">로그인이 필요합니다</p>
-        <input id="fbEmail" type="email" placeholder="이메일" style="width:100%;box-sizing:border-box;padding:11px;margin-bottom:10px;border:1px solid #ddd;border-radius:8px;font-size:14px">
-        <input id="fbPw" type="password" placeholder="비밀번호" style="width:100%;box-sizing:border-box;padding:11px;margin-bottom:16px;border:1px solid #ddd;border-radius:8px;font-size:14px">
-        <button id="fbLoginBtn" style="width:100%;padding:12px;border:0;border-radius:8px;background:#14524a;color:#fff;font-size:15px;font-weight:600;cursor:pointer">로그인</button>
-        <p id="fbErr" style="color:#c0392b;font-size:12px;margin:12px 0 0;min-height:16px"></p>
-      </div>`;
-    document.body.appendChild(ov);
-    const doLogin=async()=>{
-      const email=document.getElementById('fbEmail').value.trim();
-      const pw=document.getElementById('fbPw').value;
-      document.getElementById('fbErr').textContent='';
-      try{ await signInWithEmailAndPassword(auth, email, pw); }
-      catch(e){ document.getElementById('fbErr').textContent='로그인 실패: 이메일/비밀번호를 확인하세요'; }
-    };
-    document.getElementById('fbLoginBtn').onclick=doLogin;
-    document.getElementById('fbPw').addEventListener('keydown',e=>{ if(e.key==='Enter') doLogin(); });
-  }
-  function hideLogin(){ const el=document.getElementById('fbLogin'); if(el) el.remove(); }
-
-  // ── 로그인 상태 감지 ──
-  onAuthStateChanged(auth, async (user)=>{
+  onAuthStateChanged(auth, async(user)=>{
     if(user){
-      hideLogin();
-      _fbReady = true;
-      showFbStatus('연결됨: '+user.email, '#1a7f37');
-      // 최초 1회: 원격 데이터 불러오기
+      _fbReady=true; window._fbCurrentUser={email:user.email,name:user.displayName};
+      showFbStatus('연결됨: '+user.email,'#1a7f37');
+      // 최초: 원격 데이터 있으면 불러오기
       try{
-        const snap = await getDoc(DATA_DOC);
+        const snap=await getDoc(DATA_DOC);
         if(snap.exists() && snap.data().ls){
-          applyRemoteData(snap.data().ls);
-          location.reload();  // 데이터 반영 위해 새로고침
-          return;
+          const ok=confirm('클라우드에 저장된 데이터가 있습니다.\n\n[확인] 클라우드 데이터 불러오기 (현재 기기 데이터 덮어씀)\n[취소] 현재 기기 데이터 유지 (다음 저장 시 클라우드 갱신)');
+          if(ok){ applyRemoteData(snap.data().ls); location.reload(); return; }
         }
-      }catch(e){ console.error('초기로드 오류', e); }
-      // 실시간 동기화: 다른 사람이 저장하면 자동 반영
-      onSnapshot(DATA_DOC, (snap)=>{
-        if(_applyingRemote) return;
-        if(snap.metadata.hasPendingWrites) return;  // 내가 방금 쓴 건 무시
-        const d = snap.data();
-        if(d && d.ls && d.updatedBy !== (auth.currentUser?auth.currentUser.email:'')){
-          showFbStatus('다른 기기에서 변경됨 - 새로고침', '#c47b2c');
-        }
+      }catch(e){ console.error(e); }
+      // 실시간 변경 감지
+      onSnapshot(DATA_DOC,(snap)=>{
+        if(_applyingRemote||snap.metadata.hasPendingWrites) return;
+        const d=snap.data();
+        if(d&&d.ls&&d.updatedBy!==(auth.currentUser?auth.currentUser.email:'')) showFbStatus('다른 기기에서 변경됨 - 새로고침 권장','#c47b2c');
       });
+      // 설정 화면 열려있으면 갱신
+      if(typeof drawImportPane==='function' && document.getElementById('mBody') && document.getElementById('fbGoogleBtn')===null && document.getElementById('fbLogoutBtn')===null){ try{drawImportPane();}catch(e){} }
+      if(typeof drawImportPane==='function' && document.getElementById('mBody')){ try{drawImportPane();}catch(e){} }
     } else {
-      _fbReady = false;
-      showLogin();
+      _fbReady=false; window._fbCurrentUser=null;
+      if(typeof drawImportPane==='function' && document.getElementById('mBody')){ try{drawImportPane();}catch(e){} }
     }
   });
 
-  // ── 기존 markChange에 자동저장 연결 ──
-  const _origMarkChange = window.markChange;
-  window.markChange = function(){
-    if(typeof _origMarkChange==='function') _origMarkChange.apply(this, arguments);
-    scheduleSave();
-  };
+  // markChange에 자동저장 연결
+  const _origMC=window.markChange;
+  window.markChange=function(){ if(typeof _origMC==='function') _origMC.apply(this,arguments); scheduleSave(); };
 
-  // ── 로그아웃 함수 (전역) ──
-  window.fbLogout = ()=>{ signOut(auth); };
-
-  // ── 수동 저장/불러오기 (전역) ──
-  window.fbSaveNow = async()=>{
-    if(!_fbReady){ alert('로그인이 필요합니다'); return; }
-    const ls = collectLocalData();
-    await setDoc(DATA_DOC, { ls: ls, updatedAt: Date.now(), updatedBy: auth.currentUser.email }, { merge:false });
-    showFbStatus('수동 저장됨 ✓', '#1a7f37');
-  };
-  window.fbLoadNow = async()=>{
-    if(!_fbReady){ alert('로그인이 필요합니다'); return; }
-    const snap = await getDoc(DATA_DOC);
-    if(snap.exists() && snap.data().ls){ applyRemoteData(snap.data().ls); location.reload(); }
-  };
+  // 전역 함수 (설정 버튼에서 호출)
+  window.fbGoogleLogin=async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ alert('로그인 실패: '+(e.message||e)); } };
+  window.fbLogout=()=>{ signOut(auth); showFbStatus('로그아웃됨','#888'); };
+  window.fbSaveNow=async()=>{ if(!_fbReady){alert('먼저 구글 로그인하세요');return;} await setDoc(DATA_DOC,{ls:collectLocalData(),updatedAt:Date.now(),updatedBy:auth.currentUser.email},{merge:false}); showFbStatus('수동 저장됨 ✓','#1a7f37'); alert('클라우드에 저장했습니다.'); };
+  window.fbLoadNow=async()=>{ if(!_fbReady){alert('먼저 구글 로그인하세요');return;} const snap=await getDoc(DATA_DOC); if(snap.exists()&&snap.data().ls){ if(confirm('클라우드 데이터로 현재 기기를 덮어씁니다. 계속할까요?')){ applyRemoteData(snap.data().ls); location.reload(); } } else alert('클라우드에 저장된 데이터가 없습니다.'); };
 </script>
 
 </body>
