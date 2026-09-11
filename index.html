@@ -6218,7 +6218,9 @@ function drawInForm(){
     // 저장 시 기기재고 자동차감 스위치 (기본 꺼짐)
     const dchk=document.getElementById('devAutoChk');
     if(dchk){
-      dchk.checked = (typeof devAutoShip==='function') && devAutoShip();
+      // 항상 기본 켜짐으로 시작 (예전에 꺼둔 값 무시) — OEM 출고 자동차감 누락 방지
+      if(typeof setDevAutoShip==='function' && !devAutoShip()) setDevAutoShip(true);
+      dchk.checked = true;
       dchk.onchange=()=>{ setDevAutoShip(dchk.checked); drawLines(); inTotals(); };
     }
   }
@@ -6485,8 +6487,14 @@ function loadEntryFromBatch(rows){
   entryDraft.date=h.d||todayStr();
   entryDraft.memo=h.note||'';
   entryDraft.pay=h.pm||'계좌이체';
-  const c=C.find(x=>x.nm===h.p);
-  entryDraft.vat=(c&&c.vat)?(c.vat==='과세'?'과세포함':c.vat):'과세포함';
+  // 거래에 저장된 vat가 있으면 그대로 복원(과세별도 등 유지), 없으면 거래처 기본값
+  const savedVat = rows.find(r=>r.vat)?.vat;
+  if(savedVat && (typeof VAT_TYPES==='undefined' || VAT_TYPES.includes(savedVat))){
+    entryDraft.vat=savedVat;
+  } else {
+    const c=C.find(x=>x.nm===h.p);
+    entryDraft.vat=(c&&c.vat)?(c.vat==='과세'?'과세포함':c.vat):'과세포함';
+  }
   const li=batchToLines(rows);
   inLines = li.length? li : [{ic:'',nm:'',spec:'',unit:'ea',q:1,pr:0,bigo:''}];
   return true;
@@ -6549,7 +6557,7 @@ function _saveEntryCore(_unlock){
     if(!m){_unlock();alert('적요를 입력하세요.');return;}
     reg=autoRegisterMasters(p, [], mode);
     const vc=vatCalc(amt,mode);
-    rows.push({id:uid(),batch,d,g,p,a,m,ic:'',inm:'',u:'',q:0,pr:0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,seq:_seq,_u:1});
+    rows.push({id:uid(),batch,d,g,p,a,m,ic:'',inm:'',u:'',q:0,pr:0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,vat:mode,seq:_seq,_u:1});
   }else{
     // 매출/매입: 계정과목은 구분에 따라 자동(매출/매입)
     const acc0= (inMode==='sale')?'매출':'매입';
@@ -6558,9 +6566,9 @@ function _saveEntryCore(_unlock){
     reg=autoRegisterMasters(p, valid.filter(l=>!l.disc), mode); // 미등록 거래처·품목 자동 등록(할인 제외)
     valid.forEach(l=>{
       if(l.disc){ const damt=discLineAmt(l,mode); const vc=vatCalc(damt,mode);
-        rows.push({id:uid(),batch,d,g,p,a:acc0,m:l.nm||'할인',ic:'',inm:l.nm||'할인',spec:'',u:'',q:0,pr:0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,bigo:l.bigo||'',_disc:1,dv:l.dv||'',seq:_seq,_u:1}); return; }
+        rows.push({id:uid(),batch,d,g,p,a:acc0,m:l.nm||'할인',ic:'',inm:l.nm||'할인',spec:'',u:'',q:0,pr:0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,bigo:l.bigo||'',_disc:1,dv:l.dv||'',vat:mode,seq:_seq,_u:1}); return; }
       const vc=vatCalc(lineAmt(l.q,l.pr),mode);
-      rows.push({id:uid(),batch,d,g,p,a:acc0,m:m||l.nm,ic:l.ic||'',inm:l.nm,spec:l.spec||'',u:l.unit||'ea',q:l.q||0,pr:l.pr||0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,bigo:l.bigo||'',seq:_seq,_u:1});});
+      rows.push({id:uid(),batch,d,g,p,a:acc0,m:m||l.nm,ic:l.ic||'',inm:l.nm,spec:l.spec||'',u:l.unit||'ea',q:l.q||0,pr:l.pr||0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,bigo:l.bigo||'',vat:mode,seq:_seq,_u:1});});
   }
   if(editing){
     const rm=new Set(entryEditIds);
