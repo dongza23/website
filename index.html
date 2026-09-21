@@ -4726,9 +4726,17 @@ function entryDocData(){
   const date=(document.getElementById('fDate')||{}).value||todayStr();
   const memo=(document.getElementById('fNote')||{}).value||'';
   const vat=(document.getElementById('fVat')||{}).value||'과세';
-  const lines=inLines.filter(l=> l.disc ? (String(l.dv||'').trim()||l.nm) : (l.nm||l.pr)).map(l=> l.disc
-    ? {disc:true, nm:l.nm||'할인', spec:'', unit:'', q:'', pr:'', bigo:l.bigo||'', damt:discLineAmt(l,vat)}
-    : {nm:l.nm,spec:l.spec,unit:l.unit,q:l.q,pr:l.pr,bigo:l.bigo||''});
+  // 할인은 "바로 위 품목" 기준으로 계산 (항목별 할인)
+  const _srcLines = inLines.filter(l=> l.disc ? (String(l.dv||'').trim()||l.nm) : (l.nm||l.pr));
+  const lines = _srcLines.map((l,idx)=>{
+    if(l.disc){
+      // 바로 위의 일반 품목 찾기
+      let prevItem=null;
+      for(let k=idx-1;k>=0;k--){ if(!_srcLines[k].disc && (_srcLines[k].nm||_srcLines[k].pr)){ prevItem=_srcLines[k]; break; } }
+      return {disc:true, nm:l.nm||'할인', spec:'', unit:'', q:'', pr:'', bigo:l.bigo||'', damt:discLineAmtFor(l, prevItem, vat)};
+    }
+    return {nm:l.nm,spec:l.spec,unit:l.unit,q:l.q,pr:l.pr,bigo:l.bigo||''};
+  });
   return {to,date,memo:[memo],lines,cust:custInfo(to),vat};
 }
 function entryDocHTML(forPrint){
@@ -6299,7 +6307,23 @@ function entrySubtotalIncl(mode){
 }
 function discLineAmt(l,mode){
   const raw=String(l.dv||'').trim(); if(!raw) return 0;
-  if(/%/.test(raw)){ const pct=parseFloat(raw.replace(/[^0-9.\-]/g,''))||0; return -Math.round(entrySubtotalIncl(mode)*pct/100); }
+  if(/%/.test(raw)){ const pct=Math.abs(parseFloat(raw.replace(/[^0-9.\-]/g,''))||0); return -Math.round(entrySubtotalIncl(mode)*pct/100); }
+  const n=Math.abs(parseFloat(raw.replace(/[^0-9.\-]/g,''))||0); return -n;
+}
+// 항목별 할인: 바로 위 품목(prevItem) 금액 기준으로 계산. %면 그 품목 금액의 비율, 정액이면 그 금액
+function discLineAmtFor(l, prevItem, mode){
+  const raw=String(l.dv||'').trim(); if(!raw) return 0;
+  if(/%/.test(raw)){
+    const pct=Math.abs(parseFloat(raw.replace(/[^0-9.\-]/g,''))||0);  // 절댓값(음수% 부호 꼬임 방지)
+    // 바로 위 품목 금액 (VAT포함 기준). 위 품목 없으면 전체 소계(기존 방식)로 폴백
+    let base;
+    if(prevItem && (prevItem.q||prevItem.pr)){
+      base = lineAmt(prevItem.q, prevItem.pr);  // 그 품목 합계
+    } else {
+      base = entrySubtotalIncl(mode);
+    }
+    return -Math.round(base*pct/100);
+  }
   const n=Math.abs(parseFloat(raw.replace(/[^0-9.\-]/g,''))||0); return -n;
 }
 function refreshDiscCells(){
