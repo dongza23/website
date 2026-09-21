@@ -4726,9 +4726,18 @@ function entryDocData(){
   const date=(document.getElementById('fDate')||{}).value||todayStr();
   const memo=(document.getElementById('fNote')||{}).value||'';
   const vat=(document.getElementById('fVat')||{}).value||'과세';
-  const lines=inLines.filter(l=> l.disc ? (String(l.dv||'').trim()||l.nm) : (l.nm||l.pr)).map(l=> l.disc
-    ? {disc:true, nm:l.nm||'할인', spec:'', unit:'', q:'', pr:'', bigo:l.bigo||'', damt:discLineAmt(l,vat)}
-    : {nm:l.nm,spec:l.spec,unit:l.unit,q:l.q,pr:l.pr,bigo:l.bigo||''});
+  // 할인은 "바로 위 품목" 기준으로 계산 (항목별 할인)
+  const _srcLines = inLines.filter(l=> l.disc ? (String(l.dv||'').trim()||l.nm) : (l.nm||l.pr));
+  const lines = _srcLines.map((l,idx)=>{
+    if(l.disc){
+      // 바로 위의 일반 품목 찾기
+      let prevItem=null;
+      for(let k=idx-1;k>=0;k--){ if(!_srcLines[k].disc && (_srcLines[k].nm||_srcLines[k].pr)){ prevItem=_srcLines[k]; break; } }
+      const _tgNames = (typeof prevGroupNames==='function') ? prevGroupNames(l, _srcLines) : [];
+      return {disc:true, nm:l.nm||'할인', spec:'', unit:'', q:'', pr:'', bigo:l.bigo||'', damt:discLineAmtFor(l, prevItem, vat, _srcLines), discTarget:_tgNames};
+    }
+    return {nm:l.nm,spec:l.spec,unit:l.unit,q:l.q,pr:l.pr,bigo:l.bigo||''};
+  });
   return {to,date,memo:[memo],lines,cust:custInfo(to),vat};
 }
 function entryDocHTML(forPrint){
@@ -5685,7 +5694,7 @@ async function saveEntryDocBoth(excelOnly){
       ws.mergeCells('E1:G1'); let dd=ws.getCell('E1'); dd.value=dk; dd.alignment={horizontal:'right',vertical:'middle'}; dd.font={size:9,color:{argb:'FF888888'}};
       ws.getRow(1).height=32; ws.getRow(2).height=7;
       let total=0, supplyTot=0, subTotK2=0; const discRowsK2=[]; const drows=lines.map(l=>{
-        if(l.disc){ const full=l.damt||0; const vc=isBreak?vatCalc(full,vat):{s:full,v:0,t:full}; total+=(isBreak?vc.t:full); supplyTot+=(isBreak?vc.s:full); discRowsK2.push({nm:l.nm||'할인', amt:(isBreak?vc.s:full), bigo:l.bigo||''}); return null; }
+        if(l.disc){ const full=l.damt||0; const vc=isBreak?vatCalc(full,vat):{s:full,v:0,t:full}; total+=(isBreak?vc.t:full); supplyTot+=(isBreak?vc.s:full); discRowsK2.push({nm:l.nm||'할인', amt:(isBreak?vc.s:full), bigo:l.bigo||'', tgt:(l.discTarget||[])}); return null; }
         const vc=vatCalc(lineAmt(l.q,l.pr),vat);const unit=(isMyeon||isZero)?Math.round((l.pr||0)/1.1):(l.pr||0);total+=vc.t;supplyTot+=vc.s;subTotK2+=(isBreak?vc.s:vc.t);return {nm:l.nm,q:l.q||0,unit,amt:(isBreak?vc.s:vc.t),bigo:l.bigo||''};}).filter(Boolean);
       const vatTot=total-supplyTot; // 부가세
       // 좌측 정보 (행3~5) — 라벨 A, 값 B:C(좌측정렬), 하단 구분선
@@ -5736,7 +5745,7 @@ async function saveEntryDocBoth(excelOnly){
         // 할인 있음: 소계 / 할인 / 총액 (모두 검정색, 미리보기와 동일)
         let rr=r;
         putSumRow(rr,'소계',{formula:'SUM(E'+_firstItem+':E'+_lastItem+')',result:subTotK2}); rr++;
-        discRowsK2.forEach(d=>{ putSumRow(rr, d.nm+(d.bigo?' ('+d.bigo+')':''), d.amt, {lf:{bold:false},vf:{bold:false}}); rr++; });
+        discRowsK2.forEach(d=>{ const _tg=(d.tgt&&d.tgt.length)?' ['+d.tgt.join(', ')+']':''; putSumRow(rr, d.nm+_tg+(d.bigo?' ('+d.bigo+')':''), d.amt, {lf:{bold:false},vf:{bold:false}}); rr++; });
         putSumRow(rr,'총액',total,{lf:{size:11},vf:{size:11}});
         lastRow=rr;
       } else {
@@ -6299,13 +6308,62 @@ function entrySubtotalIncl(mode){
 }
 function discLineAmt(l,mode){
   const raw=String(l.dv||'').trim(); if(!raw) return 0;
-  if(/%/.test(raw)){ const pct=parseFloat(raw.replace(/[^0-9.\-]/g,''))||0; return -Math.round(entrySubtotalIncl(mode)*pct/100); }
+  if(/%/.test(raw)){ const pct=Math.abs(parseFloat(raw.replace(/[^0-9.\-]/g,''))||0); return -Math.round(entrySubtotalIncl(mode)*pct/100); }
+  const n=Math.abs(parseFloat(raw.replace(/[^0-9.\-]/g,''))||0); return -n;
+}
+// inLines에서 할인 l의 바로 위 품목 찾기 (단일)
+function prevItemOf(l, arr){
+  arr = arr || (typeof inLines!=='undefined'?inLines:[]);
+  const idx = arr.indexOf(l);
+  if(idx<0) return null;
+  for(let k=idx-1;k>=0;k--){ if(!arr[k].disc && (arr[k].nm||arr[k].pr)) return arr[k]; }
+  return null;
+}
+// 할인 l의 대상 품목 그룹: 직전 할인 이후 ~ 이번 할인 직전까지의 품목들 합계
+// (할인 위에 품목이 여러 개면 그 합산 금액을 기준으로 할인)
+function prevGroupBase(l, arr){
+  arr = arr || (typeof inLines!=='undefined'?inLines:[]);
+  const idx = arr.indexOf(l);
+  if(idx<0) return 0;
+  let sum=0;
+  for(let k=idx-1;k>=0;k--){
+    if(arr[k].disc) break;  // 다른 할인 만나면 그 위는 다른 그룹 → 중단
+    if(arr[k].nm||arr[k].pr) sum += lineAmt(arr[k].q, arr[k].pr);
+  }
+  return sum;
+}
+// 할인 l의 대상 품목명 목록 (거래명세서 표시용)
+function prevGroupNames(l, arr){
+  arr = arr || (typeof inLines!=='undefined'?inLines:[]);
+  const idx = arr.indexOf(l);
+  if(idx<0) return [];
+  const names=[];
+  for(let k=idx-1;k>=0;k--){
+    if(arr[k].disc) break;
+    if(arr[k].nm) names.unshift(arr[k].nm);
+  }
+  return names;
+}
+// 항목별 할인: 바로 위 품목(prevItem) 금액 기준으로 계산. %면 그 품목 금액의 비율, 정액이면 그 금액
+function discLineAmtFor(l, prevItem, mode, arr){
+  const raw=String(l.dv||'').trim(); if(!raw) return 0;
+  if(/%/.test(raw)){
+    const pct=Math.abs(parseFloat(raw.replace(/[^0-9.\-]/g,''))||0);  // 절댓값(음수% 부호 꼬임 방지)
+    // 대상 품목 그룹 합계 기준: 직전 할인 이후~이번 할인까지 품목들 합산
+    let base = prevGroupBase(l, arr);
+    if(!base){
+      // 그룹이 비었으면 (할인이 맨 위 등) 단일 품목 or 전체 소계 폴백
+      if(prevItem && (prevItem.q||prevItem.pr)) base=lineAmt(prevItem.q,prevItem.pr);
+      else base=entrySubtotalIncl(mode);
+    }
+    return -Math.round(base*pct/100);
+  }
   const n=Math.abs(parseFloat(raw.replace(/[^0-9.\-]/g,''))||0); return -n;
 }
 function refreshDiscCells(){
   const mode=(document.getElementById('fVat')||{}).value||'과세';
   document.querySelectorAll('#liBody tr').forEach(tr=>{ const i=+tr.dataset.i; const l=inLines[i]; if(!l||!l.disc)return;
-    const cell=tr.querySelector('.calc'); if(cell) cell.textContent=fmt(discLineAmt(l,mode)); });
+    const cell=tr.querySelector('.calc'); if(cell) cell.textContent=fmt(discLineAmtFor(l, prevItemOf(l), mode)); });
 }
 function drawLines(){
   const tb=document.getElementById('liBody'); if(!tb)return;
@@ -6324,7 +6382,7 @@ function drawLines(){
       <td><input data-k="nm" value="${esc(l.nm||'')}" placeholder="할인 항목명 (예: 시연용 50% 지원)" style="color:#c0392b"></td>
       <td class="c muted">-</td>
       <td><input data-k="dv" class="r" value="${esc(l.dv||'')}" placeholder="50% 또는 금액" title="예: 50%  또는  215000" style="color:#c0392b"></td>
-      <td class="calc" style="color:#c0392b">${fmt(discLineAmt(l,mode))}</td>
+      <td class="calc" style="color:#c0392b">${fmt(discLineAmtFor(l, prevItemOf(l), mode))}</td>
       <td><input data-k="bigo" value="${esc(l.bigo||'')}" placeholder="비고"></td>
       <td class="c muted">-</td>
       ${mvCell}
@@ -6454,7 +6512,13 @@ function inTotals(){
   if(inMode==='exp'){
     const amt=numv(document.getElementById('fAmt')||{value:0}); const vc=vatCalc(amt,mode);s=vc.s;v=vc.v;t=vc.t;
   }else{
-    inLines.forEach(l=>{ if(l.disc){const vc=vatCalc(discLineAmt(l,mode),mode);s+=vc.s;v+=vc.v;t+=vc.t;} else {const vc=vatCalc(lineAmt(l.q,l.pr),mode);s+=vc.s;v+=vc.v;t+=vc.t;} });
+    inLines.forEach((l,idx)=>{
+      if(l.disc){
+        // 바로 위 품목 기준 할인 (항목별)
+        let prev=null; for(let k=idx-1;k>=0;k--){ if(!inLines[k].disc && (inLines[k].nm||inLines[k].pr)){ prev=inLines[k]; break; } }
+        const vc=vatCalc(discLineAmtFor(l,prev,mode),mode); s+=vc.s;v+=vc.v;t+=vc.t;
+      } else {const vc=vatCalc(lineAmt(l.q,l.pr),mode);s+=vc.s;v+=vc.v;t+=vc.t;}
+    });
   }
   box.innerHTML=`<div class="ti"><span>공급가액</span><b>${fmt(s)}</b></div>
     <div class="ti"><span>VAT</span><b>${fmt(v)}</b></div>
@@ -6565,7 +6629,7 @@ function _saveEntryCore(_unlock){
     if(!valid.length){_unlock();alert('품목을 1개 이상 입력하세요.');return;}
     reg=autoRegisterMasters(p, valid.filter(l=>!l.disc), mode); // 미등록 거래처·품목 자동 등록(할인 제외)
     valid.forEach(l=>{
-      if(l.disc){ const damt=discLineAmt(l,mode); const vc=vatCalc(damt,mode);
+      if(l.disc){ const damt=discLineAmtFor(l, prevItemOf(l,valid), mode); const vc=vatCalc(damt,mode);
         rows.push({id:uid(),batch,d,g,p,a:acc0,m:l.nm||'할인',ic:'',inm:l.nm||'할인',spec:'',u:'',q:0,pr:0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,bigo:l.bigo||'',_disc:1,dv:l.dv||'',vat:mode,seq:_seq,_u:1}); return; }
       const vc=vatCalc(lineAmt(l.q,l.pr),mode);
       rows.push({id:uid(),batch,d,g,p,a:acc0,m:m||l.nm,ic:l.ic||'',inm:l.nm,spec:l.spec||'',u:l.unit||'ea',q:l.q||0,pr:l.pr||0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,bigo:l.bigo||'',vat:mode,seq:_seq,_u:1});});
@@ -9301,7 +9365,7 @@ function drawQDoc(){
        <th style="width:24%">${isEn?'Item':'품명'}</th><th>${isEn?'Spec':'규격/옵션'}</th><th style="width:8%">${isEn?'Unit':'단위'}</th><th style="width:8%">${isEn?'Qty':'수량'}</th><th style="width:13%">${isEn?'Price':'단가'}</th><th style="width:15%">${isEn?'Amount':'공급가액'}</th><th style="width:13%">VAT</th>
      </tr></thead><tbody>${body}${pad}${discListK.length>0 ? `
         <tr class="sum"><td colspan="3" class="c" style="font-weight:700">소계</td><td class="cur" style="font-weight:700"><span class="cs">${sym}</span>${fmt(subTotK)}</td><td></td></tr>
-        ${discListK.map(d=>`<tr><td colspan="3" class="c" style="color:#c0392b">${esc(d.nm)}${d.bigo?' ('+esc(d.bigo)+')':''}</td><td class="cur" style="color:#c0392b">${d.amt<0?'-':''}<span class="cs">${sym}</span>${fmt(Math.abs(d.amt))}</td><td></td></tr>`).join('')}
+        ${discListK.map(d=>`<tr><td colspan="3" class="c" style="color:#c0392b">${esc(d.nm)}${(d.tgt&&d.tgt.length)?' <span style="font-size:11px;color:#999">['+d.tgt.map(esc).join(', ')+']</span>':''}${d.bigo?' ('+esc(d.bigo)+')':''}</td><td class="cur" style="color:#c0392b">${d.amt<0?'-':''}<span class="cs">${sym}</span>${fmt(Math.abs(d.amt))}</td><td></td></tr>`).join('')}
         <tr class="sum"><td colspan="3" class="c" style="font-weight:800;font-size:14px">총액</td><td class="cur" style="font-weight:800;font-size:14px;color:#c0392b"><span class="cs">${sym}</span>${fmt(total)}</td><td></td></tr>` : ''}</tbody>
      <tbody><tr class="sum"><td colspan="5" class="r">${isEn?'Total':'합계'}</td><td class="r">${sym}${fmt(s)}</td><td class="r">${sym}${fmt(v)}</td></tr></tbody>
      </table>
@@ -9761,7 +9825,7 @@ function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode)
   const body=rows.map(l=>{
     if(l.disc){ const full=l.damt||0; const vc=isBreak?vatCalc(full,vatMode):{s:full,v:0,t:full};
       total+=(isBreak?vc.t:full); supplyTot+=(isBreak?vc.s:full);
-      discListK.push({nm:l.nm||'할인', bigo:l.bigo||'', amt:(isBreak?vc.t:full)});
+      discListK.push({nm:l.nm||'할인', bigo:l.bigo||'', amt:(isBreak?vc.t:full), tgt:(l.discTarget||[])});
       return ''; }  // 할인은 표 밖 소계/할인/총액으로
     const raw=lineAmt(l.q,l.pr); const vc=vatCalc(raw, vatMode); subTotK+=vc.t;
     // 단가 표시: 면세·영세만 ÷1.1. 과세별도(부가세 별도로 보이게만)와 과세별도가산은 입력 단가 그대로
@@ -9803,7 +9867,7 @@ function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode)
        <th style="width:34%">${isEn?'Item':'품명'}</th><th style="width:9%">${isEn?'Qty':'수량'}</th><th style="width:16%">${isEn?'Price':'단가'}</th><th style="width:18%">${isEn?'Amount':'금액'}${amtTag}</th><th>${isEn?'Remarks':'비고'}</th>
      </tr></thead><tbody>${body}${pad}${discListK.length>0 ? `
         <tr class="sum"><td colspan="3" class="c" style="font-weight:700">소계</td><td class="cur" style="font-weight:700"><span class="cs">${sym}</span>${fmt(subTotK)}</td><td></td></tr>
-        ${discListK.map(d=>`<tr><td colspan="3" class="c" style="color:#c0392b">${esc(d.nm)}${d.bigo?' ('+esc(d.bigo)+')':''}</td><td class="cur" style="color:#c0392b">${d.amt<0?'-':''}<span class="cs">${sym}</span>${fmt(Math.abs(d.amt))}</td><td></td></tr>`).join('')}
+        ${discListK.map(d=>`<tr><td colspan="3" class="c" style="color:#c0392b">${esc(d.nm)}${(d.tgt&&d.tgt.length)?' <span style="font-size:11px;color:#999">['+d.tgt.map(esc).join(', ')+']</span>':''}${d.bigo?' ('+esc(d.bigo)+')':''}</td><td class="cur" style="color:#c0392b">${d.amt<0?'-':''}<span class="cs">${sym}</span>${fmt(Math.abs(d.amt))}</td><td></td></tr>`).join('')}
         <tr class="sum"><td colspan="3" class="c" style="font-weight:800;font-size:14px">총액</td><td class="cur" style="font-weight:800;font-size:14px;color:#c0392b"><span class="cs">${sym}</span>${fmt(total)}</td><td></td></tr>` : ''}</tbody>
      ${isBreak?`<tbody>
           <tr class="sum"><td colspan="3" class="c">${isEn?'Subtotal':'합계 (공급가액)'}</td><td class="cur"><span class="cs">${sym}</span>${fmt(supplyTot)}</td><td></td></tr>
