@@ -4638,7 +4638,7 @@ function entryDocName(){
   let to='',cust=null,fdate='';
   try{ const d=entryDocData(); to=d.to; cust=d.cust; fdate=d.date; }catch(e){}
   const nm=(cust&&cust.nm)||to||'문서';
-  const kind = (docLangMode()==='en')?'INVOICE':'거래명세서';
+  const kind = (docKind==='quote') ? (docLangMode()==='en'?'QUOTATION':'견적서') : ((docLangMode()==='en')?'INVOICE':'거래명세서');
   // 파일명 날짜: 폼 맨 위 '일자' 기준 (없으면 오늘)
   let yy,mm,dd;
   const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(fdate||'');
@@ -4673,6 +4673,7 @@ function renderInput(){
       <button data-dt="ko" class="${docLangMode()==='ko'?'on':''}">거래명세서</button>
       <button data-dt="en" class="${docLangMode()==='en'?'on':''}">INVOICE</button>
       <button data-dt="both" class="${docLangMode()==='both'?'on':''}">국문+영문</button>
+      <button data-dk="quote" class="${docKind==='quote'?'on':''}" style="margin-left:8px;border-left:2px solid var(--border-strong)">📋 견적서</button>
     </div>
     <div class="seg" id="invCurSeg" title="INVOICE 금액 통화" style="${docLangMode()==='ko'?'opacity:.45':''}">
       <button data-cur="usd" class="${invCur==='usd'?'on':''}">USD&nbsp;$</button>
@@ -4702,6 +4703,12 @@ function renderInput(){
   const setup=document.getElementById('aiSetup');
   if(setup) setup.onclick=()=>{go('settings');sTab='ai';renderSettings();};
   // 발행 문서 종류 탭: 거래명세서(국문) / INVOICE(영문) / 국문+영문
+  // 견적서/거래명세서 종류 토글
+  document.querySelectorAll('#docTypeSeg [data-dk]').forEach(b=>b.onclick=()=>{
+    docKind = (docKind==='quote') ? 'statement' : 'quote';  // 토글
+    document.querySelectorAll('#docTypeSeg [data-dk]').forEach(x=>x.classList.toggle('on', docKind==='quote'));
+    if(typeof updateEntryDoc==='function') updateEntryDoc();
+  });
   document.querySelectorAll('#docTypeSeg [data-dt]').forEach(b=>b.onclick=()=>{
     const dt=b.dataset.dt;
     docLangs = dt==='en' ? {ko:false,en:true} : dt==='both' ? {ko:true,en:true} : {ko:true,en:false};
@@ -4716,7 +4723,8 @@ function renderInput(){
     updateEntryDoc();
   });
 }
-let docLangs={ko:true,en:false}; // 체크박스: 국문/영문 (둘 다 = 국문+영문)
+let docLangs={ko:true,en:false};
+let docKind='statement'; // 'statement'=거래명세서, 'quote'=견적서 // 체크박스: 국문/영문 (둘 다 = 국문+영문)
 let invCur='usd'; // INVOICE 통화 선택: 'usd'($) | 'krw'(₩)
 function invCurSym(){ return invCur==='krw' ? '₩' : '$'; }
 function docLangMode(){ if(docLangs.ko&&docLangs.en)return 'both'; if(docLangs.en)return 'en'; return 'ko'; }
@@ -5690,7 +5698,7 @@ async function saveEntryDocBoth(excelOnly){
       const _d=new Date(date); const _wd=['일','월','화','수','목','금','토'][isNaN(_d)?0:_d.getDay()];
       const dk=isNaN(_d)?date:`${_d.getFullYear()}년 ${_d.getMonth()+1}월 ${_d.getDate()}일 ${_wd}요일`;
       // 제목 + STATEMENT 인라인 / 날짜 우측
-      ws.mergeCells('A1:D1'); ws.getCell('A1').value={richText:[{text:'거 래 명 세 서',font:{name:'맑은 고딕',size:19,bold:true,color:{argb:'FF1A1D23'}}}]}; ws.getCell('A1').alignment={vertical:'middle'};
+      ws.mergeCells('A1:D1'); ws.getCell('A1').value={richText:[{text:(docKind==='quote'?'견 적 서':'거 래 명 세 서'),font:{name:'맑은 고딕',size:19,bold:true,color:{argb:'FF1A1D23'}}}]}; ws.getCell('A1').alignment={vertical:'middle'};
       ws.mergeCells('E1:G1'); let dd=ws.getCell('E1'); dd.value=dk; dd.alignment={horizontal:'right',vertical:'middle'}; dd.font={size:9,color:{argb:'FF888888'}};
       ws.getRow(1).height=32; ws.getRow(2).height=7;
       let total=0, supplyTot=0, subTotK2=0; const discRowsK2=[]; const drows=lines.map(l=>{
@@ -5735,21 +5743,25 @@ async function saveEntryDocBoth(excelOnly){
       const putSumRow=(rr,label,val,opt)=>{ ws.mergeCells(rr,1,rr,4); const sc=ws.getCell(rr,1); sc.value=label; sc.alignment={horizontal:'center',vertical:'middle'}; sc.font=Object.assign({bold:true,size:10},(opt&&opt.lf)||{}); ws.mergeCells(rr,6,rr,7); ws.getRow(rr).height=22; for(let c=1;c<=COLN;c++)ws.getCell(rr,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF7F7F5'}}; const vcx=ws.getCell(rr,5); if(val&&val.formula){vcx.value=val;}else{vcx.value=val;} vcx.numFmt=fmtN; vcx.font=Object.assign({bold:true,size:10},(opt&&opt.vf)||{}); vcx.alignment={horizontal:'right'}; };
       const _firstItem=HR+1, _lastItem=r-1;
       if(isBreak){
-        // 과세별도: 공급가액 / 부가세 / 최종합계
+        // 과세별도: 공급가액 / 부가세 / 최종합계 (전부 수식 연결)
         const rSup=r, rVat=r+1, rFin=r+2;
         putSumRow(rSup,'합계 (공급가액)',{formula:'SUM(E'+_firstItem+':E'+_lastItem+')',result:supplyTot});
-        putSumRow(rVat,'부가세 (VAT)',vatTot);
+        putSumRow(rVat,'부가세 (VAT)',{formula:'ROUND(E'+rSup+'*0.1,0)',result:vatTot});  // 공급가액×10% 수식
         putSumRow(rFin,'최종합계',{formula:'E'+rSup+'+E'+rVat,result:total},{lf:{color:{argb:'FFC0392B'}},vf:{size:11,color:{argb:'FFC0392B'}}});
         lastRow=rFin;
       } else if(discRowsK2.length>0){
-        // 할인 있음: 소계 / 할인 / 총액 (모두 검정색, 미리보기와 동일)
+        // 할인 있음: 소계 / 할인 / 총액 (총액 = 소계+할인들 수식)
         let rr=r;
+        const rSub=rr;
         putSumRow(rr,'소계',{formula:'SUM(E'+_firstItem+':E'+_lastItem+')',result:subTotK2}); rr++;
-        discRowsK2.forEach(d=>{ const _tg=(d.tgt&&d.tgt.length)?' ['+d.tgt.join(', ')+']':''; putSumRow(rr, d.nm+_tg+(d.bigo?' ('+d.bigo+')':''), d.amt, {lf:{bold:false},vf:{bold:false}}); rr++; });
-        putSumRow(rr,'총액',total,{lf:{size:11},vf:{size:11}});
+        const discRowNums=[];
+        discRowsK2.forEach(d=>{ const _tg=(d.tgt&&d.tgt.length)?' ['+d.tgt.join(', ')+']':''; putSumRow(rr, d.nm+_tg+(d.bigo?' ('+d.bigo+')':''), d.amt, {lf:{bold:false},vf:{bold:false}}); discRowNums.push(rr); rr++; });
+        // 총액 = 소계 + 모든 할인 (수식) → 엑셀에서 값 바꾸면 자동 재계산
+        const _totFormula2='E'+rSub+(discRowNums.length?('+'+discRowNums.map(n=>'E'+n).join('+')):'');
+        putSumRow(rr,'총액',{formula:_totFormula2,result:total},{lf:{size:11},vf:{size:11}});
         lastRow=rr;
       } else {
-        // 할인 없음: 총액 한 줄 (검정색)
+        // 할인 없음: 총액 한 줄 (SUM 수식)
         putSumRow(r,'총액',{formula:'SUM(E'+_firstItem+':E'+_lastItem+')',result:total},{lf:{},vf:{size:11}});
         lastRow=r;
       }
@@ -5781,7 +5793,7 @@ async function saveEntryDocBoth(excelOnly){
       const fax=ws.getCell(5,6);fax.value='Fax : '+INV_SUPPLIER.fax;fax.font={name:'Arial Narrow',size:10};fax.alignment={horizontal:'left',vertical:'middle'};
       ws.getRow(5).height=18;
       // INVOICE 제목 (B7, 위아래 테두리)
-      ws.mergeCells(7,2,7,CN);const ti=ws.getCell(7,2);ti.value='** INVOICE **';ti.alignment={horizontal:'center',vertical:'middle'};ti.font={name:'Arial Narrow',size:16,bold:true};ti.border={top:{style:'thin'},bottom:{style:'thin'}};ws.getRow(7).height=22;ws.getRow(8).height=21;
+      ws.mergeCells(7,2,7,CN);const ti=ws.getCell(7,2);ti.value=(docKind==='quote'?'** QUOTATION **':'** INVOICE **');ti.alignment={horizontal:'center',vertical:'middle'};ti.font={name:'Arial Narrow',size:16,bold:true};ti.border={top:{style:'thin'},bottom:{style:'thin'}};ws.getRow(7).height=22;ws.getRow(8).height=21;
       // 거래처 주소 (B9~, 거래처명 볼드 + 주소 여러줄)
       const toName=(cust.nmEn||cust.nm||''); const addrLines=(cust.addrEn||'').replace(/ {2,}/g,'\n').split(/\r?\n/).filter(Boolean);
       ws.getCell(9,2).value=toName; ws.getCell(9,2).font={name:'Arial Narrow',size:13,bold:true}; ws.getCell(9,2).alignment={horizontal:'left',vertical:'middle'};
@@ -5825,23 +5837,27 @@ async function saveEntryDocBoth(excelOnly){
         ws.getRow(TR).height=20;
       } else {
         // 할인 있음: 소계 → 할인 → 최종금액
-        // 1) Subtotal 소계
+        // 1) Subtotal 소계 (품목 금액 SUM 수식)
         let rr=r;
         ws.mergeCells(rr,1,rr,4);const st1=ws.getCell(rr,1);st1.value='Subtotal';st1.font={name:'Arial Narrow',bold:true,size:10};st1.alignment={horizontal:'center',vertical:'middle'};
         ws.getCell(rr,5).value='';
-        const sta=ws.getCell(rr,6);sta.value=subtotal;sta.numFmt=invNumFmt;sta.font={name:'Arial Narrow',bold:true,size:10};sta.alignment={horizontal:'right',vertical:'middle'};
+        const rSubE=rr;
+        const sta=ws.getCell(rr,6);sta.value={formula:'SUM(F'+_r1+':F'+_r2+')',result:subtotal};sta.numFmt=invNumFmt;sta.font={name:'Arial Narrow',bold:true,size:10};sta.alignment={horizontal:'right',vertical:'middle'};
         ws.getRow(rr).height=20; rr++;
         // 2) 할인 행들
+        const discRowNumsE=[];
         discRows.forEach(d=>{
           ws.mergeCells(rr,1,rr,4);const dl=ws.getCell(rr,1);dl.value=(d.nm||'Discount')+(d.bigo?' ('+d.bigo+')':'');dl.font={name:'Arial Narrow',size:10,color:{argb:'FFFF0000'}};dl.alignment={horizontal:'center',vertical:'middle'};
           ws.getCell(rr,5).value='';
           const da=ws.getCell(rr,6);da.value=(d.damt||0);da.numFmt=invNumFmt;da.font={name:'Arial Narrow',size:10,color:{argb:'FFFF0000'}};da.alignment={horizontal:'right',vertical:'middle'};
+          discRowNumsE.push(rr);
           ws.getRow(rr).height=18; rr++;
         });
-        // 3) 최종금액
+        // 3) 최종금액 = Subtotal + 할인들 (수식)
         ws.mergeCells(rr,1,rr,4);const fl=ws.getCell(rr,1);fl.value='Total (After Discount)';fl.font={name:'Arial Narrow',bold:true,size:10};fl.alignment={horizontal:'center',vertical:'middle'};
         ws.getCell(rr,5).value='';
-        const fa=ws.getCell(rr,6);fa.value=finalAmt;fa.numFmt=invNumFmt;fa.font={name:'Arial Narrow',bold:true,size:11,color:{argb:'FFFF0000'}};fa.alignment={horizontal:'right',vertical:'middle'};
+        const _totF='F'+rSubE+(discRowNumsE.length?('+'+discRowNumsE.map(n=>'F'+n).join('+')):'');
+        const fa=ws.getCell(rr,6);fa.value={formula:_totF,result:finalAmt};fa.numFmt=invNumFmt;fa.font={name:'Arial Narrow',bold:true,size:11,color:{argb:'FFFF0000'}};fa.alignment={horizontal:'right',vertical:'middle'};
         ws.getRow(rr).height=22;
         TR=rr;
       }
@@ -9766,7 +9782,7 @@ function invoiceDocHTML(cust, dateStr, lines, withId, vatMode, curSym){
         '<div>Office : '+esc(INV_SUPPLIER.office)+' &nbsp;&nbsp; Fax : '+esc(INV_SUPPLIER.fax)+'</div>'+
       '</div>'+
     '</div>'+
-    '<div class="i-title">** INVOICE **</div>'+
+    '<div class="i-title">'+(docKind==='quote'?'** QUOTATION **':'** INVOICE **')+'</div>'+
     '<div class="i-party">'+
       '<div class="i-to">'+(toBlock||'<div>&nbsp;</div>')+'</div>'+
       '<div class="i-meta">'+
@@ -9844,7 +9860,7 @@ function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode)
   const mArr=(memoArr||[]).filter(m=>m&&String(m).trim());
   return `<div class="doc"${withId?' id="printArea"':''}>
      <div class="dhead">
-       <div class="dtitle">${isEn?'STATEMENT':'거 래 명 세 서'}</div>
+       <div class="dtitle">${isEn?(docKind==='quote'?'QUOTATION':'STATEMENT'):(docKind==='quote'?'견 적 서':'거 래 명 세 서')}</div>
      </div>
      <div class="dtop">
        <div class="dleft">
