@@ -573,6 +573,44 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   .doc.stmt-half table.items th{padding:6px 4px;font-size:10.5px}
   .doc.stmt-half table.items td{padding:5px 5px;height:26px;font-size:10.5px}
 }
+
+/* ===== 모바일 종합 개선 ===== */
+@media (max-width:820px){
+  body{ -webkit-text-size-adjust:100%; }
+  :root{ --nav-w:0px; }
+  .app{ flex-direction:column; }
+  .sidebar{
+    position:relative !important; top:auto; left:auto; bottom:auto;
+    width:100% !important; flex:none !important; height:auto !important;
+    flex-direction:row !important; align-items:center;
+    overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap;
+    z-index:600; padding:6px 8px !important;
+  }
+  .sidebar .brand{ flex:0 0 auto; margin:0 8px 0 0 !important; }
+  .sidebar .nav{ display:flex !important; flex-direction:row !important; gap:4px; flex:1; overflow-x:auto; }
+  .sidebar .nav-item{ flex:0 0 auto; width:auto !important; padding:8px 12px !important; font-size:13px; }
+  .sidebar .nav-sec, .sidebar-clock, .sidebar-foot{ display:none !important; }
+  .sidebar-tools{ display:flex !important; flex-direction:row !important; flex:0 0 auto; gap:4px; }
+  .sidebar-tools .side-btn{ width:auto !important; padding:7px 10px !important; font-size:12px; }
+  .main{ margin-left:0 !important; padding:10px !important; }
+  .card{ padding:14px !important; margin-bottom:12px !important; }
+  .in-split, .entry-split, [class*="split"], .two-col, .cols{ display:block !important; grid-template-columns:1fr !important; }
+  #entryDoc, .doc-wrap, .preview{ width:100% !important; margin-top:14px; max-width:100% !important; }
+  .tbl-wrap, .table-wrap, .li-wrap, .items-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  #liBody, .li-table, table.items{ min-width:560px; }
+  .btn{ min-height:42px; padding:10px 14px !important; font-size:14px; }
+  .btn.sm{ min-height:36px; padding:7px 11px !important; font-size:13px; }
+  .seg, #docTypeSeg, #inTierSeg, #invCurSeg{ flex-wrap:wrap !important; gap:6px !important; }
+  .seg button{ flex:0 0 auto; }
+  input, select, textarea{ font-size:16px !important; min-height:42px; }
+  h1{ font-size:20px !important; } h2{ font-size:18px !important; } h3{ font-size:16px !important; }
+  .form-row, .grid-2, .grid-3{ grid-template-columns:1fr !important; gap:12px; }
+  #fbStatus{ font-size:11px !important; right:8px !important; bottom:8px !important; }
+}
+@media (max-width:420px){
+  .main{ padding:6px !important; } .card{ padding:10px !important; }
+  .btn{ font-size:13px; } #liBody, .li-table, table.items{ min-width:480px; }
+}
 </style>
 </head>
 <body>
