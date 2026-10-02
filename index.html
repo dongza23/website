@@ -2099,7 +2099,7 @@ function renderDashboard(){
   </div>
   <div class="kpi-grid">
     ${kpi('총 발주 금액',won(tt.incTot),'원','income',IC.up,incomeSub)}
-    ${kpi('발주 건수',fmt(incRows.length),'건','collect',IC.in,`${periodLabel} 기준`)}
+    ${kpi('발주 건수',fmt(new Set(incRows.map(t=>t.batch||t.id)).size),'건','collect',IC.in,`${periodLabel} 기준`)}
   </div>
 
   ${(()=>{
