@@ -5740,9 +5740,9 @@ async function saveEntryDocBoth(excelOnly){
   let _yy,_mm,_dd; const _m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(date||'');
   if(_m){ _yy=_m[1].slice(2); _mm=_m[2]; _dd=_m[3]; }
   else { const _dn=new Date(); _yy=String(_dn.getFullYear()).slice(2); _mm=String(_dn.getMonth()+1).padStart(2,'0'); _dd=String(_dn.getDate()).padStart(2,'0'); }
-  const fn = (mode==='en') ? `INVOICE_${baseNm}_${_yy}${_mm}${_dd}.xlsx` : `${baseNm} 거래명세서_${_yy}${_mm}${_dd}.xlsx`;
   // PDF 파일명(=document.title)을 버튼 누른 즉시 미리 설정 → 엑셀 저장(비동기) 뒤 인쇄해도 이름이 유지됨
   const pdfName = entryDocName();
+  const fn = pdfName + '.xlsx'; // 엑셀 파일명도 PDF와 동일 로직(견적서/INVOICE/PROFORMA/거래명세서)
   if(!excelOnly){ try{ document.title = pdfName; }catch(e){} }
   // 1) 저장 위치 먼저 묻기 — 사용자 제스처 유지를 위해 가장 먼저 호출
   let handle=null;
