@@ -4703,7 +4703,7 @@ function entryDocName(){
   let to='',cust=null,fdate='';
   try{ const d=entryDocData(); to=d.to; cust=d.cust; fdate=d.date; }catch(e){}
   const nm=(cust&&cust.nm)||to||'문서';
-  const kind = (docKind==='quote') ? (docLangMode()==='en'?'QUOTATION':'견적서') : ((docLangMode()==='en')?'INVOICE':'거래명세서');
+  const kind = (docKind==='quote') ? (docLangMode()==='en'?'QUOTATION':'견적서') : ((docLangMode()==='en')?(docProforma?'PROFORMA_INVOICE':'INVOICE'):'거래명세서');
   // 파일명 날짜: 폼 맨 위 '일자' 기준 (없으면 오늘)
   let yy,mm,dd;
   const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(fdate||'');
@@ -4739,6 +4739,7 @@ function renderInput(){
       <button data-dt="en" class="${docLangMode()==='en'?'on':''}">INVOICE</button>
       <button data-dt="both" class="${docLangMode()==='both'?'on':''}">국문+영문</button>
       <button data-dk="quote" class="${docKind==='quote'?'on':''}" style="margin-left:8px;border-left:2px solid var(--border-strong)">📋 견적서</button>
+      <button data-pf="1" class="${docProforma?'on':''}" title="INVOICE 제목을 Proforma Invoice로 변경 (영문 인보이스 전용)" style="border-left:2px solid var(--border-strong)">🌐 Proforma</button>
     </div>
     <div class="seg" id="invCurSeg" title="INVOICE 금액 통화" style="${docLangMode()==='ko'?'opacity:.45':''}">
       <button data-cur="usd" class="${invCur==='usd'?'on':''}">USD&nbsp;$</button>
@@ -4777,6 +4778,12 @@ function renderInput(){
     document.querySelectorAll('#docTypeSeg [data-dk]').forEach(x=>x.classList.toggle('on', docKind==='quote'));
     if(typeof updateEntryDoc==='function') updateEntryDoc();
   });
+  // Proforma Invoice 토글 (INVOICE 제목만 Proforma Invoice로)
+  document.querySelectorAll('#docTypeSeg [data-pf]').forEach(b=>b.onclick=()=>{
+    docProforma = !docProforma;
+    document.querySelectorAll('#docTypeSeg [data-pf]').forEach(x=>x.classList.toggle('on', docProforma));
+    if(typeof updateEntryDoc==='function') updateEntryDoc();
+  });
   document.querySelectorAll('#docTypeSeg [data-dt]').forEach(b=>b.onclick=()=>{
     const dt=b.dataset.dt;
     docLangs = dt==='en' ? {ko:false,en:true} : dt==='both' ? {ko:true,en:true} : {ko:true,en:false};
@@ -4793,6 +4800,7 @@ function renderInput(){
 }
 let docLangs={ko:true,en:false};
 let docKind='statement'; // 'statement'=거래명세서, 'quote'=견적서 // 체크박스: 국문/영문 (둘 다 = 국문+영문)
+let docProforma=false; // true=INVOICE 제목을 'Proforma Invoice'로 (영문 인보이스 전용)
 let invCur='usd'; // INVOICE 통화 선택: 'usd'($) | 'krw'(₩)
 function invCurSym(){ return invCur==='krw' ? '₩' : '$'; }
 function docLangMode(){ if(docLangs.ko&&docLangs.en)return 'both'; if(docLangs.en)return 'en'; return 'ko'; }
@@ -5861,7 +5869,7 @@ async function saveEntryDocBoth(excelOnly){
       const fax=ws.getCell(5,6);fax.value='Fax : '+INV_SUPPLIER.fax;fax.font={name:'Arial Narrow',size:10};fax.alignment={horizontal:'left',vertical:'middle'};
       ws.getRow(5).height=18;
       // INVOICE 제목 (B7, 위아래 테두리)
-      ws.mergeCells(7,2,7,CN);const ti=ws.getCell(7,2);ti.value=(docKind==='quote'?'** QUOTATION **':'** INVOICE **');ti.alignment={horizontal:'center',vertical:'middle'};ti.font={name:'Arial Narrow',size:16,bold:true};ti.border={top:{style:'thin'},bottom:{style:'thin'}};ws.getRow(7).height=22;ws.getRow(8).height=21;
+      ws.mergeCells(7,2,7,CN);const ti=ws.getCell(7,2);ti.value=(docKind==='quote'?'** QUOTATION **':(docProforma?'** PROFORMA INVOICE **':'** INVOICE **'));ti.alignment={horizontal:'center',vertical:'middle'};ti.font={name:'Arial Narrow',size:16,bold:true};ti.border={top:{style:'thin'},bottom:{style:'thin'}};ws.getRow(7).height=22;ws.getRow(8).height=21;
       // 거래처 주소 (B9~, 거래처명 볼드 + 주소 여러줄)
       const toName=(cust.nmEn||cust.nm||''); const addrLines=(cust.addrEn||'').replace(/ {2,}/g,'\n').split(/\r?\n/).filter(Boolean);
       ws.getCell(9,2).value=toName; ws.getCell(9,2).font={name:'Arial Narrow',size:13,bold:true}; ws.getCell(9,2).alignment={horizontal:'left',vertical:'middle'};
@@ -9856,7 +9864,7 @@ function invoiceDocHTML(cust, dateStr, lines, withId, vatMode, curSym){
         '<div>Office : '+esc(INV_SUPPLIER.office)+' &nbsp;&nbsp; Fax : '+esc(INV_SUPPLIER.fax)+'</div>'+
       '</div>'+
     '</div>'+
-    '<div class="i-title">'+(docKind==='quote'?'** QUOTATION **':'** INVOICE **')+'</div>'+
+    '<div class="i-title">'+(docKind==='quote'?'** QUOTATION **':(docProforma?'** PROFORMA INVOICE **':'** INVOICE **'))+'</div>'+
     '<div class="i-party">'+
       '<div class="i-to">'+(toBlock||'<div>&nbsp;</div>')+'</div>'+
       '<div class="i-meta">'+
