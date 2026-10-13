@@ -4711,7 +4711,7 @@ function entryDocName(){
   else { const d=new Date(); yy=String(d.getFullYear()).slice(2); mm=String(d.getMonth()+1).padStart(2,'0'); dd=String(d.getDate()).padStart(2,'0'); }
   // INVOICE: INVOICE_회사이름_날짜  /  거래명세서: 회사이름 거래명세서_날짜  (+같은날 2건째부터 _2,_3)
   const suf=entrySeqSuffix();
-  return (kind==='INVOICE') ? `INVOICE_${nm}${suf}_${yy}${mm}${dd}` : `${nm}${suf} ${kind}_${yy}${mm}${dd}`;
+  return (kind==='INVOICE') ? `INVOICE_${nm}${suf}_${yy}${mm}${dd}` : (kind==='PROFORMA_INVOICE') ? `PROFORMA_INVOICE_${nm}${suf}_${yy}${mm}${dd}` : `${nm}${suf} ${kind}_${yy}${mm}${dd}`;
 }
 
 /* ============================================================
