@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#14524a">
 <title>손익관리</title>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
@@ -322,8 +322,8 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   .panel{padding:16px 18px}
 }
 
-/* ============ MOBILE (사용 안 함 — 데스크톱 전용으로 비활성화) ============ */
-@media (max-width:1px){
+/* ============ MOBILE (햄버거 드로어 + 하단 네비) ============ */
+@media (max-width:820px){
   .sidebar{transform:translateX(-100%);transition:transform .26s cubic-bezier(.4,0,.2,1);width:280px}
   .sidebar.open{transform:translateX(0);box-shadow:0 0 40px rgba(0,0,0,.3)}
   .main{margin-left:0}
@@ -379,7 +379,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   .hbar .nm{font-size:11.5px}
   .ledger-head .lcard{min-width:calc(50% - 7px)}
 }
-@media (max-width:1px){
+@media (max-width:430px){
   .kpi-grid{grid-template-columns:1fr}
   .kpi.wide{grid-column:span 1}
 }
@@ -574,25 +574,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   .doc.stmt-half table.items td{padding:5px 5px;height:26px;font-size:10.5px}
 }
 
-/* ===== 모바일 종합 개선 ===== */
+/* ===== 모바일 종합 개선 (드로어 네비는 위 블록에서 처리) ===== */
 @media (max-width:820px){
   body{ -webkit-text-size-adjust:100%; }
-  :root{ --nav-w:0px; }
-  .app{ flex-direction:column; }
-  .sidebar{
-    position:relative !important; top:auto; left:auto; bottom:auto;
-    width:100% !important; flex:none !important; height:auto !important;
-    flex-direction:row !important; align-items:center;
-    overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap;
-    z-index:600; padding:6px 8px !important;
-  }
-  .sidebar .brand{ flex:0 0 auto; margin:0 8px 0 0 !important; }
-  .sidebar .nav{ display:flex !important; flex-direction:row !important; gap:4px; flex:1; overflow-x:auto; }
-  .sidebar .nav-item{ flex:0 0 auto; width:auto !important; padding:8px 12px !important; font-size:13px; }
-  .sidebar .nav-sec, .sidebar-clock, .sidebar-foot{ display:none !important; }
-  .sidebar-tools{ display:flex !important; flex-direction:row !important; flex:0 0 auto; gap:4px; }
-  .sidebar-tools .side-btn{ width:auto !important; padding:7px 10px !important; font-size:12px; }
-  .main{ margin-left:0 !important; padding:10px !important; }
+  .main{ padding:10px !important; }
   .card{ padding:14px !important; margin-bottom:12px !important; }
   .in-split, .entry-split, [class*="split"], .two-col, .cols{ display:block !important; grid-template-columns:1fr !important; }
   #entryDoc, .doc-wrap, .preview{ width:100% !important; margin-top:14px; max-width:100% !important; }
@@ -606,6 +591,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   h1{ font-size:20px !important; } h2{ font-size:18px !important; } h3{ font-size:16px !important; }
   .form-row, .grid-2, .grid-3{ grid-template-columns:1fr !important; gap:12px; }
   #fbStatus{ font-size:11px !important; right:8px !important; bottom:8px !important; }
+  /* 발주등록·패킹 2단 레이아웃 → 폰에서 세로로 쌓기 (인라인 min-width 덮어쓰기) */
+  .entry-wrap{ flex-direction:column !important; gap:12px !important; }
+  .entry-form, .entry-doc, #pkDoc{ min-width:0 !important; width:100% !important; flex:1 1 100% !important; }
+  .entry-doc{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .entry-doc .doc, .entry-doc .invoice{ min-width:0 !important; }
+  .entry-doc table.items{ min-width:0 !important; font-size:10.5px; }
 }
 @media (max-width:420px){
   .main{ padding:6px !important; } .card{ padding:10px !important; }
@@ -4445,8 +4436,8 @@ const ST_TYPES = ['국문','영문'];               // 명세서유형 → 문�
 // 단가유형 → 적용 가격 티어 + 통화 ($ 표시는 달러 단가)
 const PR_TYPES = ['샵','샵$','도매','도매$','지사','지사$','수출','수출$','OEM','OEM$'];
 /* 거래처 VAT 구분: 거래명세서의 5개 옵션과 동일 (값=거래명세서에서 쓰는 코드) */
-const VAT_TYPES = ['과세포함','과세별도','과세별도가산','영세','영세포함'];
-const VAT_LABELS = {'과세포함':'과세 (부가세 포함 표시)','과세별도':'과세 (부가세 별도 표시)','과세별도가산':'과세 (부가세 별도 · 단가에 10% 추가)','영세':'영세율 (수출 · 부가세 미포함)','영세포함':'영세율 (수출 · 부가세 포함)'};
+const VAT_TYPES = ['과세포함','과세별도','과세별도가산','과세별도2','영세','영세포함'];
+const VAT_LABELS = {'과세포함':'과세 (부가세 포함 표시)','과세별도':'과세 (부가세 별도 표시)','과세별도가산':'과세 (부가세 별도 · 단가에 10% 추가)','과세별도2':'과세 (부가세별도 2 · 포함단가 ÷1.1 후 VAT 별도)','영세':'영세율 (수출 · 부가세 미포함)','영세포함':'영세율 (수출 · 부가세 포함)'};
 const TIER_KEY = {'샵':'shop','도매':'whole','지사':'branch','수출':'export','OEM':'oem'};
 // 단가유형 파싱: 끝의 '$'는 달러, 없으면 원화
 function prBase(prType){ return String(prType||'').replace(/\$$/,'') || '샵'; }
@@ -5684,7 +5675,7 @@ async function savePackingExcel(){
     box(ws,HS,1,HS+8,CN);
     box(ws,3,1,17,CN);
     centerV(ws);
-    ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:1,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}};
+    ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}};
     ws.pageSetup.printArea='A1:'+ws.getColumn(CN).letter+(HS+8);
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
@@ -5756,8 +5747,8 @@ async function saveEntryDocBoth(excelOnly){
   try{
     const ExcelJS = await loadExcelJS();
     const wb = new ExcelJS.Workbook();
-    const isMyeon=(vat==='면세'); const isSep=(vat==='과세별도'); const isZero=(vat==='영세'||vat==='영세포함'); const isAdd=(vat==='과세별도가산'); const isBreak=isAdd;
-    const vtag=isZero?'(영세율)':(isMyeon?'(면세)':(isAdd?'(VAT 별도)':(isSep?'(VAT 별도)':'(VAT포함)'))); // 금액 헤더용
+    const isMyeon=(vat==='면세'); const isSep=(vat==='과세별도'); const isZero=(vat==='영세'||vat==='영세포함'); const isAdd=(vat==='과세별도가산'); const isAdd2=(vat==='과세별도2'); const isBreak=isAdd||isAdd2;
+    const vtag=isZero?'(영세율)':(isMyeon?'(면세)':((isAdd||isAdd2)?'(VAT 별도)':(isSep?'(VAT 별도)':'(VAT포함)'))); // 금액 헤더용
     const totTag=isZero?' (영세율·부가세 제외)':'';    // 합계금액(총액) 표기용
     const sym = custCurSym(cust);
     const fmtN = (sym==='$')?'"$"* #,##0;"$"* -#,##0':'"₩"* #,##0;"₩"* -#,##0';
@@ -5779,7 +5770,7 @@ async function saveEntryDocBoth(excelOnly){
       ws.getRow(1).height=32; ws.getRow(2).height=7;
       let total=0, supplyTot=0, subTotK2=0; const discRowsK2=[]; const drows=lines.map(l=>{
         if(l.disc){ const full=l.damt||0; const vc=isBreak?vatCalc(full,vat):{s:full,v:0,t:full}; total+=(isBreak?vc.t:full); supplyTot+=(isBreak?vc.s:full); discRowsK2.push({nm:l.nm||'할인', amt:(isBreak?vc.s:full), bigo:l.bigo||'', tgt:(l.discTarget||[])}); return null; }
-        const vc=vatCalc(lineAmt(l.q,l.pr),vat);const unit=(isMyeon||isZero)?Math.round((l.pr||0)/1.1):(l.pr||0);total+=vc.t;supplyTot+=vc.s;subTotK2+=(isBreak?vc.s:vc.t);return {nm:l.nm,q:l.q||0,unit,amt:(isBreak?vc.s:vc.t),bigo:l.bigo||''};}).filter(Boolean);
+        const vc=vatCalc(lineAmt(l.q,l.pr),vat);const unit=(isMyeon||isZero||isAdd2)?Math.round((l.pr||0)/1.1):(l.pr||0);total+=vc.t;supplyTot+=vc.s;subTotK2+=(isBreak?vc.s:vc.t);return {nm:l.nm,q:l.q||0,unit,amt:(isBreak?vc.s:vc.t),bigo:l.bigo||''};}).filter(Boolean);
       const vatTot=total-supplyTot; // 부가세
       // 좌측 정보 (행3~5) — 라벨 A, 값 B:C(좌측정렬), 하단 구분선
       const bb={bottom:{style:'thin',color:{argb:'FFDDDDDD'}}};
@@ -5849,7 +5840,7 @@ async function saveEntryDocBoth(excelOnly){
       const mr=payR+1; ws.getCell(mr,1).value='비고'; ws.getCell(mr,1).font={bold:true,size:8,color:{argb:'FF888888'}}; ws.getRow(mr).height=20;
       ws.mergeCells(mr,2,mr,COLN); ws.getCell(mr,2).value=(memo||[]).filter(Boolean).join(' / '); ws.getCell(mr,2).font={size:9}; box(ws,mr,1,mr,COLN);
       // A4 한 페이지 맞춤 인쇄
-      ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:1,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}};
+      ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}};
       ws.pageSetup.printArea='A1:'+ws.getColumn(COLN).letter+mr;
       centerV(ws);
     };
@@ -5950,7 +5941,7 @@ async function saveEntryDocBoth(excelOnly){
       try{ if(typeof SEAL==='string' && SEAL.indexOf('base64,')>=0){ const sid2=wb.addImage({base64:SEAL.split('base64,')[1],extension:'png'}); ws.addImage(sid2,{tl:{col:5.45,row:p0-0.55},ext:{width:56,height:56}}); } }catch(e){}
       centerV(ws);
       // A4 한 페이지 맞춤 인쇄
-      ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:1,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}};
+      ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}};
       ws.pageSetup.printArea='A1:'+ws.getColumn(CN).letter+(p0+3);
     };
 
@@ -6014,7 +6005,7 @@ async function saveEntryDocBoth(excelOnly){
       box(ws,HS,1,HS+8,CN);
       box(ws,3,1,17,CN);
       centerV(ws);
-      ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:1,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}};
+      ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}};
       ws.pageSetup.printArea='A1:'+ws.getColumn(CN).letter+(HS+8);
     };
 
@@ -6250,7 +6241,7 @@ function drawInForm(){
        <div class="fld"><label>결제구분</label>
          <select id="fPay"><option value="계좌이체" ${entryDraft.pay!=='카드'?'selected':''}>계좌이체</option><option value="카드" ${entryDraft.pay==='카드'?'selected':''}>카드</option></select></div>
        <div class="fld"><label>VAT 구분 <span class="muted" style="font-weight:400;font-size:11px">· 정식 수출은 <b>영세율</b> 선택 시 부가세 없이 발행됩니다</span></label>
-         <select id="fVat"><option value="과세포함" ${(entryDraft.vat==='과세포함'||entryDraft.vat==='과세'||!entryDraft.vat)?'selected':''}>과세 (부가세 포함 표시)</option><option value="과세별도" ${entryDraft.vat==='과세별도'?'selected':''}>과세 (부가세 별도 표시)</option><option value="과세별도가산" ${entryDraft.vat==='과세별도가산'?'selected':''}>과세 (부가세 별도 · 단가에 10% 추가)</option><option value="영세" ${entryDraft.vat==='영세'?'selected':''}>영세율 (수출 · 부가세 미포함)</option><option value="영세포함" ${entryDraft.vat==='영세포함'?'selected':''}>영세율 (수출 · 부가세 포함)</option></select>
+         <select id="fVat"><option value="과세포함" ${(entryDraft.vat==='과세포함'||entryDraft.vat==='과세'||!entryDraft.vat)?'selected':''}>과세 (부가세 포함 표시)</option><option value="과세별도" ${entryDraft.vat==='과세별도'?'selected':''}>과세 (부가세 별도 표시)</option><option value="과세별도가산" ${entryDraft.vat==='과세별도가산'?'selected':''}>과세 (부가세 별도 · 단가에 10% 추가)</option><option value="과세별도2" ${entryDraft.vat==='과세별도2'?'selected':''}>과세 (부가세별도 2 · 포함단가 ÷1.1 후 VAT 별도)</option><option value="영세" ${entryDraft.vat==='영세'?'selected':''}>영세율 (수출 · 부가세 미포함)</option><option value="영세포함" ${entryDraft.vat==='영세포함'?'selected':''}>영세율 (수출 · 부가세 포함)</option></select>
        </div>
      </div>
      <div class="fld"><label>메모</label><input id="fNote" placeholder="비고/메모" value="${esc(entryDraft.memo||'')}"></div>
@@ -9914,9 +9905,9 @@ function invoiceDocHTML(cust, dateStr, lines, withId, vatMode, curSym){
 function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode){
   vatMode = vatMode || (cust && cust.vat) || '과세';
   const sym = custCurSym(cust);
-  const isMyeon = (vatMode==='면세'); const isSep=(vatMode==='과세별도'); const isZero=(vatMode==='영세'||vatMode==='영세포함'); const isAdd=(vatMode==='과세별도가산');
-  const isBreak = isAdd; // 공급가액·부가세·최종합계 3줄은 '단가에 10% 추가' 방식에서만
-  const amtTag = isEn ? (isZero?' (VAT excluded)':(isAdd?' (VAT excluded)':(isSep?' (VAT included)':''))) : (isZero?' (영세율적용)':(isMyeon?' (면세)':(isAdd?' (VAT 별도)':(isSep?' (VAT 별도)':' (VAT포함)')))); // 금액 헤더
+  const isMyeon = (vatMode==='면세'); const isSep=(vatMode==='과세별도'); const isZero=(vatMode==='영세'||vatMode==='영세포함'); const isAdd=(vatMode==='과세별도가산'); const isAdd2=(vatMode==='과세별도2');
+  const isBreak = isAdd || isAdd2; // 공급가액·부가세·최종합계 3줄 표시 (단가 10% 가산 / 포함단가 ÷1.1 모두)
+  const amtTag = isEn ? (isZero?' (VAT excluded)':((isAdd||isAdd2)?' (VAT excluded)':(isSep?' (VAT included)':''))) : (isZero?' (영세율적용)':(isMyeon?' (면세)':((isAdd||isAdd2)?' (VAT 별도)':(isSep?' (VAT 별도)':' (VAT포함)')))); // 금액 헤더
   const totTag = isEn ? '' : (isZero?' (영세율·부가세 제외)':'');
   let total=0, supplyTot=0; const rows=lines.filter(l=>l.nm||l.pr);
   let subTotK=0; const discListK=[];
@@ -9926,8 +9917,8 @@ function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode)
       discListK.push({nm:l.nm||'할인', bigo:l.bigo||'', amt:(isBreak?vc.t:full), tgt:(l.discTarget||[])});
       return ''; }  // 할인은 표 밖 소계/할인/총액으로
     const raw=lineAmt(l.q,l.pr); const vc=vatCalc(raw, vatMode); subTotK+=vc.t;
-    // 단가 표시: 면세·영세만 ÷1.1. 과세별도(부가세 별도로 보이게만)와 과세별도가산은 입력 단가 그대로
-    const unitDisp = (isMyeon || isZero) ? Math.round((l.pr||0)/1.1) : (l.pr||0);
+    // 단가 표시: 면세·영세·과세별도2(포함단가 ÷1.1)는 ÷1.1. 과세별도/과세별도가산은 입력 단가 그대로
+    const unitDisp = (isMyeon || isZero || isAdd2) ? Math.round((l.pr||0)/1.1) : (l.pr||0);
     const amtDisp = isBreak ? vc.s : vc.t; total+=vc.t; supplyTot+=vc.s;
     return `<tr><td class="c">${esc(l.nm)}</td>
       <td class="c">${l.q?fmt(l.q):''}</td>
