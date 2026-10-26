@@ -4436,8 +4436,8 @@ const ST_TYPES = ['국문','영문'];               // 명세서유형 → 문�
 // 단가유형 → 적용 가격 티어 + 통화 ($ 표시는 달러 단가)
 const PR_TYPES = ['샵','샵$','도매','도매$','지사','지사$','수출','수출$','OEM','OEM$'];
 /* 거래처 VAT 구분: 거래명세서의 5개 옵션과 동일 (값=거래명세서에서 쓰는 코드) */
-const VAT_TYPES = ['과세포함','과세별도','과세별도가산','과세별도2','영세','영세포함'];
-const VAT_LABELS = {'과세포함':'과세 (부가세 포함 표시)','과세별도':'과세 (부가세 별도 표시)','과세별도가산':'과세 (부가세 별도 · 단가에 10% 추가)','과세별도2':'과세 (부가세별도 2 · 포함단가 ÷1.1 후 VAT 별도)','영세':'영세율 (수출 · 부가세 미포함)','영세포함':'영세율 (수출 · 부가세 포함)'};
+const VAT_TYPES = ['과세포함','과세별도','과세별도가산','과세별도2','과세별도3','영세','영세포함'];
+const VAT_LABELS = {'과세포함':'1. 과세 · 부가세 포함 표시 (금액에 VAT 포함)','과세별도':'2. 과세 · 부가세 별도 표시 (표시만 별도, 추가 없음)','과세별도가산':'3. 과세 · 부가세 별도 표시 + 10% 추가','과세별도2':'4. 과세 · 포함단가 ÷1.1 → 공급가+부가세+최종합계 (3줄)','과세별도3':'5. 과세 · 포함단가 ÷1.1 → 공급가액만 합계 (1줄)','영세':'6. 영세율 (수출 · 부가세 미포함)','영세포함':'7. 영세율 (수출 · 부가세 포함)'};
 const TIER_KEY = {'샵':'shop','도매':'whole','지사':'branch','수출':'export','OEM':'oem'};
 // 단가유형 파싱: 끝의 '$'는 달러, 없으면 원화
 function prBase(prType){ return String(prType||'').replace(/\$$/,'') || '샵'; }
@@ -5747,8 +5747,8 @@ async function saveEntryDocBoth(excelOnly){
   try{
     const ExcelJS = await loadExcelJS();
     const wb = new ExcelJS.Workbook();
-    const isMyeon=(vat==='면세'); const isSep=(vat==='과세별도'); const isZero=(vat==='영세'||vat==='영세포함'); const isAdd=(vat==='과세별도가산'); const isAdd2=(vat==='과세별도2'); const isBreak=isAdd||isAdd2;
-    const vtag=isZero?'(영세율)':(isMyeon?'(면세)':((isAdd||isAdd2)?'(VAT 별도)':(isSep?'(VAT 별도)':'(VAT포함)'))); // 금액 헤더용
+    const isMyeon=(vat==='면세'); const isSep=(vat==='과세별도'); const isZero=(vat==='영세'||vat==='영세포함'); const isAdd=(vat==='과세별도가산'); const isAdd2=(vat==='과세별도2'); const isAdd3=(vat==='과세별도3'); const isBreak=isAdd||isAdd2; const isSupplyAmt=isBreak||isAdd3;
+    const vtag=isZero?'(영세율)':(isMyeon?'(면세)':((isAdd||isAdd2||isAdd3)?'(VAT 별도)':(isSep?'(VAT 별도)':'(VAT포함)'))); // 금액 헤더용
     const totTag=isZero?' (영세율·부가세 제외)':'';    // 합계금액(총액) 표기용
     const sym = custCurSym(cust);
     const fmtN = (sym==='$')?'"$"* #,##0;"$"* -#,##0':'"₩"* #,##0;"₩"* -#,##0';
@@ -5769,17 +5769,18 @@ async function saveEntryDocBoth(excelOnly){
       ws.mergeCells('E1:G1'); let dd=ws.getCell('E1'); dd.value=dk; dd.alignment={horizontal:'right',vertical:'middle'}; dd.font={size:9,color:{argb:'FF888888'}};
       ws.getRow(1).height=32; ws.getRow(2).height=7;
       let total=0, supplyTot=0, subTotK2=0; const discRowsK2=[]; const drows=lines.map(l=>{
-        if(l.disc){ const full=l.damt||0; const vc=isBreak?vatCalc(full,vat):{s:full,v:0,t:full}; total+=(isBreak?vc.t:full); supplyTot+=(isBreak?vc.s:full); discRowsK2.push({nm:l.nm||'할인', amt:(isBreak?vc.s:full), bigo:l.bigo||'', tgt:(l.discTarget||[])}); return null; }
-        const vc=vatCalc(lineAmt(l.q,l.pr),vat);const unit=(isMyeon||isZero||isAdd2)?Math.round((l.pr||0)/1.1):(l.pr||0);total+=vc.t;supplyTot+=vc.s;subTotK2+=(isBreak?vc.s:vc.t);return {nm:l.nm,q:l.q||0,unit,amt:(isBreak?vc.s:vc.t),bigo:l.bigo||''};}).filter(Boolean);
+        if(l.disc){ const full=l.damt||0; const vc=(isBreak||isAdd3)?vatCalc(full,vat):{s:full,v:0,t:full}; total+=(isBreak?vc.t:full); supplyTot+=(isBreak?vc.s:(isAdd3?vc.s:full)); discRowsK2.push({nm:l.nm||'할인', amt:(isBreak||isAdd3?vc.s:full), bigo:l.bigo||'', tgt:(l.discTarget||[])}); return null; }
+        const vc=vatCalc(lineAmt(l.q,l.pr),vat);const unit=(isMyeon||isZero||isAdd2||isAdd3)?Math.round((l.pr||0)/1.1):(l.pr||0);total+=vc.t;supplyTot+=vc.s;subTotK2+=(isSupplyAmt?vc.s:vc.t);return {nm:l.nm,q:l.q||0,unit,amt:(isSupplyAmt?vc.s:vc.t),bigo:l.bigo||''};}).filter(Boolean);
       const vatTot=total-supplyTot; // 부가세
       // 좌측 정보 (행3~5) — 라벨 A, 값 B:C(좌측정렬), 하단 구분선
       const bb={bottom:{style:'thin',color:{argb:'FFDDDDDD'}}};
       const _minRows=Math.max(drows.length,13); const _sumRow=10+_minRows; const _finalRow=_sumRow+(isBreak?2:0);
       const _totFormula = isBreak ? ('E'+_finalRow) : ('SUM(E10:E'+(9+_minRows)+')'); // 합계행 없으면 품목 금액 합(HR=9 → 첫 품목행 10)
-      const LV=[['수신',(cust.nm||to)+' 귀하',false],['합계금액'+totTag,total,true],['공급일자',dk,false]];
+      const headTot = isAdd3 ? supplyTot : total;
+      const LV=[['수신',(cust.nm||to)+' 귀하',false],['합계금액'+totTag,headTot,true],['공급일자',dk,false]];
       LV.forEach((row,i)=>{const r=3+i;const kc=ws.getCell(r,1);kc.value=row[0];kc.font={size:9,color:{argb:'FF888888'}};kc.alignment={vertical:'middle'};kc.border=bb;
         ws.mergeCells(r,2,r,3);const vc2=ws.getCell(r,2);vc2.alignment={vertical:'middle',horizontal:'left'};vc2.border=bb;ws.getCell(r,3).border=bb;
-        if(row[2]){vc2.value={formula:_totFormula,result:total};vc2.font={bold:true,size:13,color:{argb:'FFC0392B'}};vc2.numFmt=fmtN;}else{vc2.value=row[1];vc2.font={size:10};}
+        if(row[2]){vc2.value={formula:_totFormula,result:headTot};vc2.font={bold:true,size:13,color:{argb:'FFC0392B'}};vc2.numFmt=fmtN;}else{vc2.value=row[1];vc2.font={size:10};}
         ws.getRow(r).height=24;});
       // 우측 공급자 (행3 상호 D:G, 행4~7 라벨 D, 값 E:G)
       ws.mergeCells(3,4,3,COLN); const rn=ws.getCell(3,4); rn.value=ISSUER.name; rn.font={bold:true,size:12}; rn.alignment={vertical:'middle',indent:1};
@@ -5816,6 +5817,10 @@ async function saveEntryDocBoth(excelOnly){
         putSumRow(rVat,'부가세 (VAT)',{formula:'ROUND(E'+rSup+'*0.1,0)',result:vatTot});  // 공급가액×10% 수식
         putSumRow(rFin,'최종합계',{formula:'E'+rSup+'+E'+rVat,result:total},{lf:{color:{argb:'FFC0392B'}},vf:{size:11,color:{argb:'FFC0392B'}}});
         lastRow=rFin;
+      } else if(isAdd3 && discRowsK2.length===0){
+        // 부가세별도 3: 공급가액 합계 한 줄만 (부가세·최종합계 없음)
+        putSumRow(r,'합계 (공급가액)',{formula:'SUM(E'+_firstItem+':E'+_lastItem+')',result:supplyTot},{lf:{color:{argb:'FFC0392B'}},vf:{size:11,color:{argb:'FFC0392B'}}});
+        lastRow=r;
       } else if(discRowsK2.length>0){
         // 할인 있음: 소계 / 할인 / 총액 (총액 = 소계+할인들 수식)
         let rr=r;
@@ -6241,7 +6246,7 @@ function drawInForm(){
        <div class="fld"><label>결제구분</label>
          <select id="fPay"><option value="계좌이체" ${entryDraft.pay!=='카드'?'selected':''}>계좌이체</option><option value="카드" ${entryDraft.pay==='카드'?'selected':''}>카드</option></select></div>
        <div class="fld"><label>VAT 구분 <span class="muted" style="font-weight:400;font-size:11px">· 정식 수출은 <b>영세율</b> 선택 시 부가세 없이 발행됩니다</span></label>
-         <select id="fVat"><option value="과세포함" ${(entryDraft.vat==='과세포함'||entryDraft.vat==='과세'||!entryDraft.vat)?'selected':''}>과세 (부가세 포함 표시)</option><option value="과세별도" ${entryDraft.vat==='과세별도'?'selected':''}>과세 (부가세 별도 표시)</option><option value="과세별도가산" ${entryDraft.vat==='과세별도가산'?'selected':''}>과세 (부가세 별도 · 단가에 10% 추가)</option><option value="과세별도2" ${entryDraft.vat==='과세별도2'?'selected':''}>과세 (부가세별도 2 · 포함단가 ÷1.1 후 VAT 별도)</option><option value="영세" ${entryDraft.vat==='영세'?'selected':''}>영세율 (수출 · 부가세 미포함)</option><option value="영세포함" ${entryDraft.vat==='영세포함'?'selected':''}>영세율 (수출 · 부가세 포함)</option></select>
+         <select id="fVat"><option value="과세포함" ${(entryDraft.vat==='과세포함'||entryDraft.vat==='과세'||!entryDraft.vat)?'selected':''}>1. 과세 · 부가세 포함 표시 (금액에 VAT 포함)</option><option value="과세별도" ${entryDraft.vat==='과세별도'?'selected':''}>2. 과세 · 부가세 별도 표시 (표시만 별도, 추가 없음)</option><option value="과세별도가산" ${entryDraft.vat==='과세별도가산'?'selected':''}>3. 과세 · 부가세 별도 표시 + 10% 추가</option><option value="과세별도2" ${entryDraft.vat==='과세별도2'?'selected':''}>4. 과세 · 포함단가 ÷1.1 → 공급가+부가세+최종합계 (3줄)</option><option value="과세별도3" ${entryDraft.vat==='과세별도3'?'selected':''}>5. 과세 · 포함단가 ÷1.1 → 공급가액만 합계 (1줄)</option><option value="영세" ${entryDraft.vat==='영세'?'selected':''}>6. 영세율 (수출 · 부가세 미포함)</option><option value="영세포함" ${entryDraft.vat==='영세포함'?'selected':''}>7. 영세율 (수출 · 부가세 포함)</option></select>
        </div>
      </div>
      <div class="fld"><label>메모</label><input id="fNote" placeholder="비고/메모" value="${esc(entryDraft.memo||'')}"></div>
@@ -9905,21 +9910,22 @@ function invoiceDocHTML(cust, dateStr, lines, withId, vatMode, curSym){
 function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode){
   vatMode = vatMode || (cust && cust.vat) || '과세';
   const sym = custCurSym(cust);
-  const isMyeon = (vatMode==='면세'); const isSep=(vatMode==='과세별도'); const isZero=(vatMode==='영세'||vatMode==='영세포함'); const isAdd=(vatMode==='과세별도가산'); const isAdd2=(vatMode==='과세별도2');
+  const isMyeon = (vatMode==='면세'); const isSep=(vatMode==='과세별도'); const isZero=(vatMode==='영세'||vatMode==='영세포함'); const isAdd=(vatMode==='과세별도가산'); const isAdd2=(vatMode==='과세별도2'); const isAdd3=(vatMode==='과세별도3');
   const isBreak = isAdd || isAdd2; // 공급가액·부가세·최종합계 3줄 표시 (단가 10% 가산 / 포함단가 ÷1.1 모두)
-  const amtTag = isEn ? (isZero?' (VAT excluded)':((isAdd||isAdd2)?' (VAT excluded)':(isSep?' (VAT included)':''))) : (isZero?' (영세율적용)':(isMyeon?' (면세)':((isAdd||isAdd2)?' (VAT 별도)':(isSep?' (VAT 별도)':' (VAT포함)')))); // 금액 헤더
+  const isSupplyAmt = isBreak || isAdd3; // 금액 컬럼을 공급가(÷1.1)로 표시
+  const amtTag = isEn ? (isZero?' (VAT excluded)':((isAdd||isAdd2||isAdd3)?' (VAT excluded)':(isSep?' (VAT included)':''))) : (isZero?' (영세율적용)':(isMyeon?' (면세)':((isAdd||isAdd2||isAdd3)?' (VAT 별도)':(isSep?' (VAT 별도)':' (VAT포함)')))); // 금액 헤더
   const totTag = isEn ? '' : (isZero?' (영세율·부가세 제외)':'');
   let total=0, supplyTot=0; const rows=lines.filter(l=>l.nm||l.pr);
   let subTotK=0; const discListK=[];
   const body=rows.map(l=>{
-    if(l.disc){ const full=l.damt||0; const vc=isBreak?vatCalc(full,vatMode):{s:full,v:0,t:full};
-      total+=(isBreak?vc.t:full); supplyTot+=(isBreak?vc.s:full);
-      discListK.push({nm:l.nm||'할인', bigo:l.bigo||'', amt:(isBreak?vc.t:full), tgt:(l.discTarget||[])});
+    if(l.disc){ const full=l.damt||0; const vc=(isBreak||isAdd3)?vatCalc(full,vatMode):{s:full,v:0,t:full};
+      total+=(isBreak?vc.t:full); supplyTot+=(isBreak?vc.s:(isAdd3?vc.s:full));
+      discListK.push({nm:l.nm||'할인', bigo:l.bigo||'', amt:(isBreak?vc.t:(isAdd3?vc.s:full)), tgt:(l.discTarget||[])});
       return ''; }  // 할인은 표 밖 소계/할인/총액으로
-    const raw=lineAmt(l.q,l.pr); const vc=vatCalc(raw, vatMode); subTotK+=vc.t;
-    // 단가 표시: 면세·영세·과세별도2(포함단가 ÷1.1)는 ÷1.1. 과세별도/과세별도가산은 입력 단가 그대로
-    const unitDisp = (isMyeon || isZero || isAdd2) ? Math.round((l.pr||0)/1.1) : (l.pr||0);
-    const amtDisp = isBreak ? vc.s : vc.t; total+=vc.t; supplyTot+=vc.s;
+    const raw=lineAmt(l.q,l.pr); const vc=vatCalc(raw, vatMode); subTotK+=(isAdd3?vc.s:vc.t);
+    // 단가 표시: 면세·영세·과세별도2·과세별도3(포함단가 ÷1.1)는 ÷1.1. 과세별도/과세별도가산은 입력 단가 그대로
+    const unitDisp = (isMyeon || isZero || isAdd2 || isAdd3) ? Math.round((l.pr||0)/1.1) : (l.pr||0);
+    const amtDisp = isSupplyAmt ? vc.s : vc.t; total+=vc.t; supplyTot+=vc.s;
     return `<tr><td class="c">${esc(l.nm)}</td>
       <td class="c">${l.q?fmt(l.q):''}</td>
       <td class="cur"><span class="cs">${sym}</span>${fmt(unitDisp)}</td>
@@ -9938,7 +9944,7 @@ function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode)
      <div class="dtop">
        <div class="dleft">
          <div class="lrow"><span class="lk">${isEn?'To':'수신'}</span><span class="lv">${esc(recvName)}${(!isEn&&recvName)?' 귀하':''}</span></div>
-         <div class="lrow big"><span class="lk">${isEn?'Total':'합계금액'}${totTag}</span><span class="lv" style="color:#c0392b">${sym}${fmt(total)}</span></div>
+         <div class="lrow big"><span class="lk">${isEn?'Total':'합계금액'}${totTag}</span><span class="lv" style="color:#c0392b">${sym}${fmt(isAdd3?supplyTot:total)}</span></div>
          <div class="lrow"><span class="lk">${isEn?'Date':'공급일자'}</span><span class="lv">${esc(dateK)}</span></div>
        </div>
        <div class="dright">
@@ -9957,11 +9963,14 @@ function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode)
      </tr></thead><tbody>${body}${pad}${discListK.length>0 ? `
         <tr class="sum"><td colspan="3" class="c" style="font-weight:700">소계</td><td class="cur" style="font-weight:700"><span class="cs">${sym}</span>${fmt(subTotK)}</td><td></td></tr>
         ${discListK.map(d=>`<tr><td colspan="3" class="c" style="color:#c0392b">${esc(d.nm)}${(d.tgt&&d.tgt.length)?' <span style="font-size:11px;color:#999">['+d.tgt.map(esc).join(', ')+']</span>':''}${d.bigo?' ('+esc(d.bigo)+')':''}</td><td class="cur" style="color:#c0392b">${d.amt<0?'-':''}<span class="cs">${sym}</span>${fmt(Math.abs(d.amt))}</td><td></td></tr>`).join('')}
-        <tr class="sum"><td colspan="3" class="c" style="font-weight:800;font-size:14px">총액</td><td class="cur" style="font-weight:800;font-size:14px;color:#c0392b"><span class="cs">${sym}</span>${fmt(total)}</td><td></td></tr>` : ''}</tbody>
+        <tr class="sum"><td colspan="3" class="c" style="font-weight:800;font-size:14px">총액</td><td class="cur" style="font-weight:800;font-size:14px;color:#c0392b"><span class="cs">${sym}</span>${fmt(isAdd3?supplyTot:total)}</td><td></td></tr>` : ''}</tbody>
      ${isBreak?`<tbody>
           <tr class="sum"><td colspan="3" class="c">${isEn?'Subtotal':'합계 (공급가액)'}</td><td class="cur"><span class="cs">${sym}</span>${fmt(supplyTot)}</td><td></td></tr>
           <tr class="sum"><td colspan="3" class="c">${isEn?'VAT (10%)':'부가세 (VAT)'}</td><td class="cur"><span class="cs">${sym}</span>${fmt(vatTot)}</td><td></td></tr>
           <tr class="sum"><td colspan="3" class="c">${isEn?'Total':'최종합계'}</td><td class="cur" style="color:#c0392b"><span class="cs">${sym}</span>${fmt(total)}</td><td></td></tr>
+     </tbody>`:''}
+     ${(isAdd3 && discListK.length===0)?`<tbody>
+          <tr class="sum"><td colspan="3" class="c">${isEn?'Subtotal (supply)':'합계 (공급가액)'}</td><td class="cur" style="color:#c0392b"><span class="cs">${sym}</span>${fmt(supplyTot)}</td><td></td></tr>
      </tbody>`:''}
      </table>
      <div class="drow">
