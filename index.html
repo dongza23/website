@@ -5869,7 +5869,7 @@ async function saveEntryDocBoth(excelOnly){
       // 거래처 주소 (B9~, 거래처명 볼드 + 주소 여러줄)
       const toName=(cust.nmEn||cust.nm||''); const addrLines=(cust.addrEn||'').replace(/ {2,}/g,'\n').split(/\r?\n/).filter(Boolean);
       ws.getCell(9,2).value=toName; ws.getCell(9,2).font={name:'Arial Narrow',size:13,bold:true}; ws.getCell(9,2).alignment={horizontal:'left',vertical:'middle'};
-      addrLines.forEach((ln,i)=>{const ac=ws.getCell(10+i,2);ac.value=ln;ac.font={name:'Arial Narrow',size:11};ac.alignment={horizontal:'left',vertical:'middle',wrapText:true};ws.getRow(10+i).height=17;});
+      addrLines.forEach((ln,i)=>{const rr=10+i;ws.mergeCells(rr,2,rr,4);const ac=ws.getCell(rr,2);ac.value=ln;ac.font={name:'Arial Narrow',size:11};ac.alignment={horizontal:'left',vertical:'middle',wrapText:true};ws.getRow(rr).height=Math.max(17, Math.ceil((ln||'').length/58)*16);});
       ws.getRow(9).height=18;
       // Ref.No / PO Date (E,F열)
       const _ref=ws.getCell(9,5); _ref.value='Ref. No. : '; _ref.font={name:'Arial Narrow',size:10}; _ref.alignment={horizontal:'right',vertical:'middle'};
@@ -5942,7 +5942,9 @@ async function saveEntryDocBoth(excelOnly){
         ['- Method of Payment : '+INV_SUPPLIER.payMethod,'- Account No.: '+INV_SUPPLIER.account],
         ['- Bank Name: '+INV_SUPPLIER.bankName,'- Beneficiary: '+INV_SUPPLIER.beneficiary],
         ['- Bank Address : '+INV_SUPPLIER.bankAddr,'']];
-      PL.forEach((row,i)=>{ws.mergeCells(p0+i,1,p0+i,3);const lc=ws.getCell(p0+i,1);lc.value=row[0];lc.font={name:'Arial Narrow',size:9};lc.alignment={vertical:'middle'};ws.mergeCells(p0+i,4,p0+i,CN);const rc=ws.getCell(p0+i,4);rc.value=row[1];rc.font={name:'Arial Narrow',size:9};rc.alignment={horizontal:'left',vertical:'middle'};ws.getRow(p0+i).height=16;});
+      PL.forEach((row,i)=>{const rr=p0+i; const full=!row[1];
+        if(full){ ws.mergeCells(rr,1,rr,CN); const lc=ws.getCell(rr,1);lc.value=row[0];lc.font={name:'Arial Narrow',size:9};lc.alignment={vertical:'middle',wrapText:true};ws.getRow(rr).height=Math.max(16, Math.ceil((row[0]||'').length/95)*15); }
+        else { ws.mergeCells(rr,1,rr,3);const lc=ws.getCell(rr,1);lc.value=row[0];lc.font={name:'Arial Narrow',size:9};lc.alignment={vertical:'middle'};ws.mergeCells(rr,4,rr,CN);const rc=ws.getCell(rr,4);rc.value=row[1];rc.font={name:'Arial Narrow',size:9};rc.alignment={horizontal:'left',vertical:'middle'};ws.getRow(rr).height=16; }});
       try{ if(typeof SEAL==='string' && SEAL.indexOf('base64,')>=0){ const sid2=wb.addImage({base64:SEAL.split('base64,')[1],extension:'png'}); ws.addImage(sid2,{tl:{col:5.45,row:p0-0.55},ext:{width:56,height:56}}); } }catch(e){}
       centerV(ws);
       // A4 한 페이지 맞춤 인쇄
@@ -9834,8 +9836,10 @@ function invoiceDocHTML(cust, dateStr, lines, withId, vatMode, curSym){
       '.invoice .i-sup{text-align:left;font-size:12.5px}'+
       '.invoice .i-sup .i-sup-nm{font-weight:700;font-size:14px}'+
       '.invoice .i-title{text-align:center;font-weight:700;font-size:21px;letter-spacing:.06em;margin:10px 0 14px}'+
-      '.invoice .i-party{display:flex;justify-content:space-between;gap:16px;margin-bottom:10px}'+
-      '.invoice .i-to{font-weight:700}'+
+      '.invoice .i-party{display:flex;justify-content:space-between;gap:16px;margin-bottom:10px;align-items:flex-start}'+
+      '.invoice .i-to{font-weight:700;max-width:64%}'+
+      '.invoice .i-to>div{line-height:1.5;overflow-wrap:anywhere}'+
+      '.invoice .i-meta{flex:0 0 auto;white-space:nowrap}'+
       '.invoice .i-meta div{display:flex;gap:8px;justify-content:flex-end}'+
       '.invoice .i-meta .i-k{color:#333}'+
       '.invoice .i-charges{background:#c0c0c0;font-weight:700;padding:3px 8px;border:1px solid #999;border-bottom:0}'+
