@@ -218,7 +218,11 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
 .tbl.compact th{padding:7px 8px}
 .tbl.compact td{padding:6px 8px}
 .tbl.compact{font-size:12.5px}
-.tbl .memo{white-space:normal;color:var(--ink-soft);max-width:220px;font-size:12px}
+/* 긴 메모·품명·거래처는 한 줄 말줄임(…) 처리 → 표가 가로로 커지지 않아 수정/삭제가 한 페이지에 보임 (전체 내용은 마우스를 올리면 표시) */
+.tbl .memo{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink-soft);max-width:130px;font-size:12px}
+.tbl .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.tbl .pty{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px}
+.tbl td.act{white-space:nowrap}
 .edit-row td{background:var(--brand-soft)!important;padding:14px 14px 16px!important;border-bottom:1.5px solid var(--brand)!important}
 .edit-row .edit-inner{background:var(--surface);border:1.5px solid var(--brand);border-radius:11px;padding:14px 16px}
 .edit-row .edit-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -2504,15 +2508,15 @@ function drawTx(){
     return `<tr data-row-id="${t.id}" class="${sub?'batch-sub':''}">
       <td class="muted">${sub?'':t.d}</td>
       <td>${sub?'':`<span class="chip ${chip}">${cls}</span>`}</td>
-      <td>${sub?'':(esc(t.p)?esc(t.p)+((t.seq&&t.seq>=2)?`<span class="muted" style="font-size:11px"> _${t.seq}</span>`:''):'<span class="muted">-</span>')}</td>
+      <td class="pty" title="${esc(t.p||'')}">${sub?'':(esc(t.p)?esc(t.p)+((t.seq&&t.seq>=2)?`<span class="muted" style="font-size:11px"> _${t.seq}</span>`:''):'<span class="muted">-</span>')}</td>
       ${showAcct?`<td class="muted">${sub?'':(esc(t.a)||'-')}</td>`:''}
-      <td>${sub?'<span class="muted" style="margin-left:10px">└</span> ':''}${inmText||'<span class="muted">-</span>'}</td>
+      <td class="nm" title="${esc(t.inm||'')}">${sub?'<span class="muted" style="margin-left:10px">└</span> ':''}${inmText||'<span class="muted">-</span>'}</td>
       <td class="r muted">${t.q?fmt(t.q):''}</td>
       <td class="r num">${won(t.s)}</td>
       <td class="r muted num">${t.v?won(t.v):''}</td>
       <td class="r num"><b>${won(t.t)}</b></td>
       <td class="muted">${sub?'':payLabel(t)}</td>
-      <td class="memo">${esc(t.note||'')||'<span class="muted">-</span>'}</td>
+      <td class="memo" title="${esc(t.note||'')}">${esc(t.note||'')||'<span class="muted">-</span>'}</td>
       <td class="r act">${t._u?`<button class="btn xs" data-edit="${t.id}">수정</button> <button class="btn xs danger" ${sub?`data-del-one="${t.id}" title="이 품목 줄만 삭제"`:`data-del-txn="${t.id}"`}>삭제</button>`:'<span class="muted" style="font-size:11px">기본</span>'}</td></tr>`;};
   // 배치 요약 행 HTML
   const groupHTML=(g)=>{
@@ -2523,9 +2527,9 @@ function drawTx(){
     let h=`<tr class="batch-head" data-batch="${g.key}" style="cursor:pointer">
       <td class="muted">${f.d}</td>
       <td><span class="chip ${chip}">${cls}</span></td>
-      <td>${esc(f.p)?esc(f.p)+((f.seq&&f.seq>=2)?`<span class="muted" style="font-size:11px"> _${f.seq}</span>`:''):'<span class="muted">-</span>'}</td>
+      <td class="pty" title="${esc(f.p||'')}">${esc(f.p)?esc(f.p)+((f.seq&&f.seq>=2)?`<span class="muted" style="font-size:11px"> _${f.seq}</span>`:''):'<span class="muted">-</span>'}</td>
       ${showAcct?`<td class="muted">${esc(f.a)||'-'}</td>`:''}
-      <td><span class="bcaret">${open?'▾':'▸'}</span> ${esc(f.inm||'(품목)')} <span class="muted">외 ${g.rows.length-1}건</span></td>
+      <td class="nm" title="${esc(f.inm||'')} 외 ${g.rows.length-1}건"><span class="bcaret">${open?'▾':'▸'}</span> ${esc(f.inm||'(품목)')} <span class="muted">외 ${g.rows.length-1}건</span></td>
       <td class="r muted">${sQ?fmt(sQ):''}</td>
       <td class="r num">${won(sS)}</td>
       <td class="r muted num">${sV?won(sV):''}</td>
@@ -2547,7 +2551,7 @@ function drawTx(){
     <div class="tbl-wrap">
       <table class="tbl compact"><thead><tr>
         <th>일자</th><th>구분</th><th>거래처</th>${showAcct?'<th>계정</th>':''}<th>품명</th>
-        <th class="r">수량</th><th class="r">공급가</th><th class="r">VAT</th><th class="r">합계</th><th>결제</th><th>메모</th><th></th>
+        <th class="r">수량</th><th class="r">공급가</th><th class="r">VAT</th><th class="r">합계</th><th>결제</th><th>메모</th><th class="acth r">작업</th>
       </tr></thead><tbody>
       ${pgGroups.map(groupHTML).join('')}
       </tbody></table>
