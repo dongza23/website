@@ -587,6 +587,10 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
   #entryDoc, .doc-wrap, .preview{ width:100% !important; margin-top:14px; max-width:100% !important; }
   .tbl-wrap, .table-wrap, .li-wrap, .items-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
   #liBody, .li-table, table.items{ min-width:560px; }
+  /* 발주등록 품목 입력표 — 폰에서 칸 뭉개짐 방지: 가로 스크롤 */
+  .lineitems{ overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .lineitems table{ min-width:600px !important; table-layout:auto !important; width:600px !important; }
+  .lineitems th, .lineitems td{ white-space:nowrap; }
   .btn{ min-height:42px; padding:10px 14px !important; font-size:14px; }
   .btn.sm{ min-height:36px; padding:7px 11px !important; font-size:13px; }
   .seg, #docTypeSeg, #inTierSeg, #invCurSeg{ flex-wrap:wrap !important; gap:6px !important; }
@@ -4499,6 +4503,33 @@ function priceForItem(item, prType, stType){
 }
 // 거래처명으로 단가유형/명세서유형 조회
 function custPricing(name){ const c=C.find(x=>x.nm===name)||{}; return {prType:c.prType||'샵', stType:c.stType||'국문', vat:c.vat||'과세'}; }
+/* ===== 품명 약칭 → 정식 품목 매칭 =====
+   예) 콜라겐→콜라제닉스, 히알→하이드라 퓨어 HA, 엑소→엑소SS, 니들프리기계→엠더마젯 */
+function normItemNm(s){ return String(s||'').toLowerCase().replace(/[\s\-_.·・()]/g,''); }
+const ITEM_ALIAS = {
+  '콜라겐':'콜라제닉스','콜라':'콜라제닉스',
+  '히알':'하이드라 퓨어 HA','히알루론':'하이드라 퓨어 HA','하이드라':'하이드라 퓨어 HA','ha':'하이드라 퓨어 HA',
+  '엑소':'엑소SS','엑소에스에스':'엑소SS','엑소에이치에스':'엑소HS',
+  '니들프리':'엠더마젯','니들프리기계':'엠더마젯','니들프리제트':'엠더마젯','제트':'엠더마젯','젯':'엠더마젯','엠더마제트':'엠더마젯',
+  '소노':'엠더마 소노플라즈마','소노플라즈마':'엠더마 소노플라즈마','플라즈마':'엠더마 소노플라즈마',
+  '하이푸':'UV 하이푸','리바디':'엠더마.리바디','알핏':'엠더마 알핏','슈틸루스터':'엠더마.슈틸루스터',
+  '크리스탈':'크리스탈 글로우','글로우':'크리스탈 글로우',
+  '센시티브':'센시티브 케어','클레리아':'클레리아-X',
+  'vs':'VS-라인','브이에스':'VS-라인',
+  '리비좀':'리비좀 WB','인비덤':'인비덤맥스','써마':'써마트레스','소노셀':'소노셀(LDM)',
+};
+function resolveItemByName(typed){
+  const t=normItemNm(typed); if(!t) return null;
+  // 1) 정확 일치(공백·기호 무시)
+  let it=I.find(x=>normItemNm(x.nm)===t); if(it) return it;
+  // 2) 별칭 맵
+  const al=ITEM_ALIAS[t]; if(al){ it=I.find(x=>x.nm===al); if(it) return it; }
+  // 3) 부분 일치 (OEM·배너 제외 우선, 이름 길이가 가장 비슷한 것)
+  const matchIn=(arr)=>{ const c=arr.filter(x=>{const n=normItemNm(x.nm); return n && (n.includes(t)||t.includes(n));}); if(!c.length)return null; c.sort((a,b)=>Math.abs(normItemNm(a.nm).length-t.length)-Math.abs(normItemNm(b.nm).length-t.length)); return c[0]; };
+  it=matchIn(I.filter(x=>x.nm && !/_OEM$/.test(x.nm) && !/배너/.test(x.nm))); if(it) return it;
+  it=matchIn(I.filter(x=>x.nm)); if(it) return it;
+  return null;
+}
 /* 거래처별 품목 고정가(특별가) — 설정돼 있으면 최우선 적용 */
 function custFixedPrice(party, itemNm){
   if(!party||!itemNm) return 0;
@@ -5617,70 +5648,124 @@ async function savePackingExcel(){
     const centerV=(ws)=>{ ws.eachRow({includeEmpty:false},(row)=>{ row.eachCell({includeEmpty:false},(cell)=>{ const a=cell.alignment||{}; cell.alignment=Object.assign({},a,{vertical:'middle'}); }); }); };
     const p=packingState(cust,date,lines);
     const sup=INV_SUPPLIER||{};
+    // ===== PACKING LIST (기존 수기 엑셀 양식과 동일 레이아웃) =====
+    const MG='맑은 고딕', AN='Arial Narrow';
+    const blk={style:'thin',color:{argb:'FF000000'}};
+    const dbl={style:'double',color:{argb:'FF000000'}};
+    const F=(argb)=>({type:'pattern',pattern:'solid',fgColor:{argb}});
+    const F_TITLE=F('FFEEECE1'), F_HDR=F('FFF2F2F2');
     const ws=wb.addWorksheet('PACKING LIST',{views:[{showGridLines:false}]});
-    ws.columns=[{width:20},{width:14},{width:14},{width:13},{width:13},{width:13},{width:13},{width:13}];
+    ws.columns=[{width:1.43},{width:6.57},{width:16.14},{width:26.29},{width:12.0},{width:6.43},{width:17.43},{width:19.71}];
     const CN=8;
-    const setc=(r,c,v,opt)=>{const cell=ws.getCell(r,c);cell.value=v;opt=opt||{};cell.font=Object.assign({size:9},opt.font||{});cell.alignment=Object.assign({vertical:'top',wrapText:true},opt.al||{});return cell;};
-    const lbl=(r,c,t)=>{const cell=ws.getCell(r,c);cell.value=t;cell.font={size:7.5,bold:true,color:{argb:'FF555555'}};cell.alignment={vertical:'top'};};
-    const setLV=(r,c,label,value,opt)=>{const cell=ws.getCell(r,c);cell.value={richText:[{text:label+'\n',font:{size:7.5,bold:true,color:{argb:'FF555555'}}},{text:String(value==null?'':value),font:Object.assign({size:9,color:{argb:'FF111111'}},(opt&&opt.font)||{})}]};cell.alignment=Object.assign({vertical:'top',wrapText:true},(opt&&opt.al)||{});return cell;};
-    ws.mergeCells(1,1,1,CN);setc(1,1,'PACKING LIST',{font:{size:18,bold:true},al:{horizontal:'center',vertical:'middle'}});ws.getRow(1).height=34;
-    ws.mergeCells(3,1,6,5);ws.mergeCells(3,6,6,CN);
-    setLV(3,1,'(1) Shipper/Exporter',((sup.name||INV_SUPPLIER_DEFAULT.name)+'\n'+(sup.addr1||INV_SUPPLIER_DEFAULT.addr1)+'\n'+(sup.addr2||INV_SUPPLIER_DEFAULT.addr2)+'\nOffice : '+(sup.office||INV_SUPPLIER_DEFAULT.office)));
-    setLV(3,6,'(8) No & Date of invoice','Invoice No : '+p.invNo+'\n'+p.invDate);
-    ws.mergeCells(7,1,10,5);ws.mergeCells(7,6,10,CN);
-    setLV(7,1,'(2) Consignee',p.consignee||cust.nm||'');
-    setLV(7,6,'(9) L/C Issuing bank','T/T');
-    // Consignee 주소 자동 줄바꿈이 보이도록 행 높이 확보 (7~10행)
-    for(let rr=7;rr<=10;rr++){ ws.getRow(rr).height=22; }
-    ws.mergeCells(11,1,13,5);ws.mergeCells(11,6,13,CN);
-    setLV(11,1,'(3) Notify party',p.notify||'SAME AS CONSIGNEE');
-    setLV(11,6,'(10) Remarks','MADE IN KOREA\nIncoterms : EXW\nPallet : 1100 X 1100 X 120');
-    ws.mergeCells(14,1,15,4);ws.mergeCells(14,5,15,CN);
-    setLV(14,1,'(4) Port of loading',p.portLoading);
-    setLV(14,5,'(5) Final destination',p.finalDest);
-    ws.mergeCells(16,1,17,4);ws.mergeCells(16,5,17,CN);
-    setLV(16,1,'(6) Carrier',p.carrier);
-    setLV(16,5,'(7) Sailing on or about',p.sailing);
-    const HR=18;
-    ws.mergeCells(HR,1,HR,2);ws.mergeCells(HR,3,HR,4);
-    const hd=[[1,'(11) Marks & numbers of PKGS'],[3,'(12) Description of goods'],[5,'(13) Quantity/unit'],[6,'(14) Net-weight (KG)'],[7,'(15) Gross-weight (KG)']];
-    hd.forEach(([c,t])=>{const cell=ws.getCell(HR,c);cell.value=t;cell.font={bold:true,size:8};cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F2F2'}};});
-    ws.mergeCells(HR,7,HR,8);ws.getRow(HR).height=28;
-    // (12)~(15) 품목을 줄마다 표시 — 첫 줄에 Marks 표기
+    const gc=(r,c)=>ws.getCell(r,c);
+    const set=(r,c,v,font,align)=>{const x=ws.getCell(r,c);if(v!==undefined)x.value=v;if(font)x.font=Object.assign({name:MG},font);if(align)x.alignment=align;return x;};
+    const rect=(r1,c1,r2,c2)=>{for(let c=c1;c<=c2;c++){const t=gc(r1,c);t.border=Object.assign({},t.border,{top:blk});const b=gc(r2,c);b.border=Object.assign({},b.border,{bottom:blk});}for(let r=r1;r<=r2;r++){const l=gc(r,c1);l.border=Object.assign({},l.border,{left:blk});const rr=gc(r,c2);rr.border=Object.assign({},rr.border,{right:blk});}};
+    const vdiv=(r1,r2,col)=>{for(let r=r1;r<=r2;r++){const x=gc(r,col);x.border=Object.assign({},x.border,{left:blk});}};
+    const allbox=(r1,c1,r2,c2)=>{for(let r=r1;r<=r2;r++)for(let c=c1;c<=c2;c++){gc(r,c).border={top:blk,bottom:blk,left:blk,right:blk};}};
+    const LBL={name:MG,size:9,bold:true}; const lblA={horizontal:'left',vertical:'center'};
+    // 데이터 준비
+    const invDateStr=(()=>{const mn=['January','February','March','April','May','June','July','August','September','October','November','December'];const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(p.invDate||'');return m?(mn[+m[2]-1]+' '+(+m[3])+', '+m[1]):(p.invDate||'');})();
+    const consigneeName=(cust.nmEn||cust.nm||'');
+    const consigneeAddr=String(p.consignee||'').split(/\r?\n/).filter(x=>x && x!==consigneeName);
     const pkLines=(lines||[]).filter(l=>l.nm);
-    let dr=19; const firstDR=dr;
-    if(pkLines.length){
-      pkLines.forEach((l,idx)=>{
-        const it=I.find(x=>x.nm===l.nm)||{}; const enNm=it.nmEn||l.nm;
-        ws.mergeCells(dr,1,dr,2);ws.mergeCells(dr,3,dr,4);ws.mergeCells(dr,7,dr,8);
-        setc(dr,1, idx===0 ? (p.marks||'C/NO 1') : '', {});
-        setc(dr,3, enNm, {al:{vertical:'middle'}});
-        setc(dr,5, (+l.q||0), {al:{horizontal:'center',vertical:'middle'}});
-        setc(dr,6, '', {al:{horizontal:'center',vertical:'middle'}});
-        setc(dr,7, '', {al:{horizontal:'center',vertical:'middle'}});
-        ws.getRow(dr).height=22; dr++;
-      });
-    }else{
-      ws.mergeCells(dr,1,dr,2);ws.mergeCells(dr,3,dr,4);ws.mergeCells(dr,7,dr,8);
-      setc(dr,1,p.marks,{});setc(dr,3,p.desc,{});setc(dr,5,p.qty,{al:{horizontal:'center',vertical:'middle'}});
-      ws.getRow(dr).height=70; dr++;
-    }
-    const TR=dr;
-    ws.mergeCells(TR,1,TR,2);ws.mergeCells(TR,3,TR,6);ws.mergeCells(TR,7,TR,8);
-    setc(TR,1,'TOTAL',{font:{bold:true},al:{horizontal:'center',vertical:'middle'}});
-    setc(TR,3,'1 Pallet : 1100 X 1100 X 120',{al:{vertical:'middle'}});
-    const _totQ=pkLines.reduce((s,l)=>s+(+l.q||0),0);
-    setc(TR,5,_totQ||p.qty||'',{font:{bold:true},al:{horizontal:'center',vertical:'middle'}});
-    ws.getRow(TR).height=22;
-    box(ws,HR,1,TR,CN);
-    const HS=TR+2; ws.mergeCells(HS,1,HS+8,CN);
-    setc(HS,1,'HS CODE :\n'+p.hs+'\n\n'+p.warehouse,{al:{vertical:'top',wrapText:true},font:{size:9}});
-    for(let _r=HS;_r<=HS+8;_r++) ws.getRow(_r).height=16;
-    box(ws,HS,1,HS+8,CN);
-    box(ws,3,1,17,CN);
-    centerV(ws);
-    ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,horizontalCentered:true,margins:{left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2}};
-    ws.pageSetup.printArea='A1:'+ws.getColumn(CN).letter+(HS+8);
+    // R1 여백
+    ws.getRow(1).height=14;
+    // R2 제목
+    ws.mergeCells(2,2,2,CN); const ti=set(2,2,'PACKING LIST',{name:MG,size:20,bold:true},{horizontal:'center',vertical:'center'});
+    for(let c=2;c<=CN;c++){gc(2,c).fill=F_TITLE;gc(2,c).border={bottom:dbl};}
+    ws.getRow(2).height=46; ws.getRow(3).height=15;
+    // (1)Shipper / (8)Invoice
+    ws.mergeCells(4,2,4,6); set(4,2,'(1)Shipper/Exporter',LBL,lblA);
+    ws.mergeCells(4,7,4,CN); set(4,7,'(8)No & Date of invoice',LBL,lblA);
+    set(5,3,(sup.name||INV_SUPPLIER_DEFAULT.name),{name:AN,size:13,bold:true},lblA);
+    set(6,3,(sup.addr1||INV_SUPPLIER_DEFAULT.addr1),{name:AN,size:10},lblA);
+    set(7,3,(sup.addr2||INV_SUPPLIER_DEFAULT.addr2),{name:AN,size:10},lblA);
+    ws.mergeCells(8,3,8,5); set(8,3,'Office : '+(sup.office||INV_SUPPLIER_DEFAULT.office),{name:AN,size:10},lblA);
+    set(6,7,'Invoice No :  '+p.invNo,{name:MG,size:10},lblA);
+    set(7,7,invDateStr,{name:MG,size:10},lblA);
+    ws.getRow(4).height=12; ws.getRow(5).height=22; ws.getRow(6).height=20; ws.getRow(7).height=20; ws.getRow(8).height=20;
+    rect(4,2,8,CN); vdiv(4,8,7);
+    // (2)Consignee / (9)L/C
+    ws.mergeCells(9,2,9,6); set(9,2,'(2)Consignee',LBL,lblA);
+    ws.mergeCells(9,7,9,CN); set(9,7,'(9)L/C Issuing bank',LBL,lblA);
+    set(10,3,consigneeName,{name:AN,size:13,bold:true},lblA);
+    consigneeAddr.slice(0,6).forEach((ln,i)=>{ set(11+i,3,ln,{name:MG,size:10},lblA); });
+    set(14,7,'T/T',{name:MG,size:12},lblA);
+    ws.getRow(9).height=14; for(let r=10;r<=16;r++) ws.getRow(r).height=18.5;
+    rect(9,2,16,CN); vdiv(9,16,7);
+    // (3)Notify / (10)Remarks
+    ws.mergeCells(17,2,17,6); set(17,2,'(3)Notify party',LBL,lblA);
+    ws.mergeCells(17,7,17,CN); set(17,7,'(10)Remarks:',LBL,lblA);
+    set(18,3,(p.notify||'SAME AS CONSIGNEE'),{name:MG,size:10},lblA);
+    set(18,7,'MADE IN KOREA',{name:MG,size:11},{horizontal:'left',vertical:'center',wrapText:true});
+    const rk=set(18,8,'Incoterms : EXW',{name:MG,size:11},{vertical:'center'}); rk.fill=F_HDR;
+    ws.getRow(17).height=14; for(let r=18;r<=21;r++) ws.getRow(r).height=18.5;
+    rect(17,2,21,CN); vdiv(17,21,7);
+    // (4)Port/(5)Final  (6)Carrier/(7)Sailing
+    ws.mergeCells(22,2,22,4); set(22,2,'(4)Port of loading',LBL,lblA);
+    ws.mergeCells(22,5,22,6); set(22,5,'(5)Final destination',LBL,lblA);
+    ws.mergeCells(22,7,22,CN); set(22,7,'',LBL,lblA);
+    set(23,3,(p.portLoading||'Busan Port, KOREA.'),{name:MG,size:10},{vertical:'center'});
+    set(23,5,(p.finalDest||''),{name:MG,size:10},lblA);
+    ws.mergeCells(24,2,24,4); set(24,2,'(6)Carrier',LBL,lblA);
+    ws.mergeCells(24,5,24,6); set(24,5,'(7)Sailing on or about',LBL,lblA);
+    set(25,3,(p.carrier||''),{name:MG,size:10},{vertical:'center'});
+    set(25,5,(p.sailing||''),{name:MG,size:10},lblA);
+    ws.mergeCells(23,7,25,CN);
+    ws.getRow(22).height=14; ws.getRow(23).height=21; ws.getRow(24).height=14; ws.getRow(25).height=21;
+    rect(22,2,25,CN); vdiv(22,25,5); vdiv(22,25,7);
+    for(let c=2;c<=6;c++){gc(22,c).border=Object.assign({},gc(22,c).border,{bottom:blk}); gc(23,c).border=Object.assign({},gc(23,c).border,{bottom:blk}); gc(24,c).border=Object.assign({},gc(24,c).border,{bottom:blk});}
+    ws.getRow(26).height=8;
+    // 품목표 헤더
+    const HR=27;
+    ws.mergeCells(HR,2,HR,3); ws.mergeCells(HR,5,HR,6);
+    [[2,'(11)Marks and numbers of PKGS',8],[4,'(12)Description of goods',9],[5,'(13)Quantity/unit',9],[7,'(14)Net-weight (KG)',9],[8,'(15)Gross-weight (KG)',9]].forEach(([c,t,sz])=>{const x=set(HR,c,t,{name:MG,size:sz,bold:true},{horizontal:'center',vertical:'center',wrapText:true});x.fill=F_HDR;});
+    ws.getRow(HR).height=16;
+    // 품목 행 (1줄=1박스 가정, 치수·무게는 비워 사용자가 채움)
+    let r=HR+1; const first=r;
+    let cno=0;
+    pkLines.forEach((l)=>{
+      const it=I.find(x=>x.nm===l.nm)||{}; const enNm=it.nmEn||l.nm;
+      const dim=(it.pkDim||'').trim(); const net=+it.pkNet||0; const gross=+it.pkGross||0;
+      const q=+l.q||0; const perBox=(+it.pkQty>0)?(+it.pkQty):1;  // 박스당 수량(없으면 1개=1박스)
+      const boxes=Math.max(1,Math.ceil(q/perBox));               // 박스 수 = 올림(수량/박스당수량)
+      for(let bi=0; bi<boxes; bi++){
+        cno++;
+        const cq=Math.min(perBox, q - bi*perBox);  // 이 박스에 담긴 수량
+        ws.mergeCells(r,2,r,3);
+        set(r,2,'C/NO '+cno+(dim?('\n'+dim):''),{name:MG,size:11},{horizontal:'center',vertical:'center',wrapText:true});
+        set(r,4,enNm,{name:MG,size:10},{horizontal:'center',vertical:'center',wrapText:true});
+        ws.mergeCells(r,5,r,6);
+        const qc=set(r,5,(cq>0?cq:''),{name:MG,size:9},{horizontal:'center',vertical:'center'}); qc.numFmt='#,##0';
+        const nc=set(r,7,net>0?net:'',{name:MG,size:11},{horizontal:'center',vertical:'center'}); if(net>0)nc.numFmt='0.##';
+        const gx=set(r,8,gross>0?gross:'',{name:MG,size:11},{horizontal:'center',vertical:'center'}); if(gross>0)gx.numFmt='0.##';
+        ws.getRow(r).height=dim?40:28; r++;
+      }
+    });
+    if(!pkLines.length){ ws.mergeCells(r,2,r,3); set(r,2,'C/NO 1',{name:MG,size:11},{horizontal:'center',vertical:'center',wrapText:true}); ws.mergeCells(r,5,r,6); ws.getRow(r).height=28; r++; }
+    const last=r-1;
+    // TOTAL
+    ws.mergeCells(r,2,r,3); set(r,2,'TOTAL',{name:MG,size:11,bold:true},{horizontal:'center',vertical:'center',wrapText:true}).fill=F_TITLE;
+    gc(r,4).fill=F_TITLE;
+    ws.mergeCells(r,5,r,6); const qt=set(r,5,{formula:'SUM(E'+first+':E'+last+')'},{name:MG,size:11,bold:true},{horizontal:'center',vertical:'center'}); qt.numFmt='#,##0'; qt.fill=F_TITLE;
+    const nt=set(r,7,{formula:'SUM(G'+first+':G'+last+')'},{name:MG,size:11},{horizontal:'center',vertical:'center'}); nt.numFmt='0.##'; nt.fill=F_TITLE;
+    const gt=set(r,8,{formula:'SUM(H'+first+':H'+last+')'},{name:MG,size:11},{horizontal:'center',vertical:'center'}); gt.numFmt='0.##'; gt.fill=F_TITLE;
+    ws.getRow(r).height=24;
+    allbox(HR,2,r,CN);
+    const totalRow=r; r++;
+    // (17) Signed by
+    const sgn=r; ws.getRow(sgn).height=84;
+    ws.mergeCells(sgn,4,sgn,6); set(sgn,4,'(17) Signed by',{name:MG,size:10,bold:true},{horizontal:'center',vertical:'bottom'});
+    gc(sgn,4).border={bottom:blk}; gc(sgn,6).border={bottom:blk};
+    try{ if(typeof SEAL==='string' && SEAL.indexOf('base64,')>=0){ const sid=wb.addImage({base64:SEAL.split('base64,')[1],extension:'png'}); ws.addImage(sid,{tl:{col:6.55,row:sgn-0.15},ext:{width:70,height:70}}); } }catch(e){}
+    r++; ws.getRow(r).height=6; r++;
+    // HS CODE 푸터
+    const HS=r; ws.mergeCells(HS,2,HS,CN);
+    const hx=set(HS,2,'HS CODE : \n'+(p.hs||'')+'\n\n'+(p.warehouse||''),{name:MG,size:10},{horizontal:'left',vertical:'top',wrapText:true});
+    for(let c=2;c<=CN;c++){gc(HS,c).fill=F_HDR;gc(HS,c).border={top:blk,bottom:blk};}
+    ws.getRow(HS).height=170;
+    ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:1,margins:{left:0.25,right:0.25,top:0.5,bottom:0.5,header:0.2,footer:0.2}};
+    ws.pageSetup.printArea='A1:H'+HS;
     const buf=await wb.xlsx.writeBuffer();
     const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     if(handle){ const w=await handle.createWritable(); await w.write(blob); await w.close(); }
@@ -5796,7 +5881,7 @@ async function saveEntryDocBoth(excelOnly){
       const vdiv={style:'thin',color:{argb:'FFCBCBCB'}};
       for(let r=3;r<=7;r++){ const cell=ws.getCell(r,4); const b=Object.assign({},cell.border); b.left=vdiv; cell.border=b; }
       // 직인 — 상호/등록번호 우측(빈 공간)에 겹쳐서
-      try{ if(typeof SEAL==='string' && SEAL.indexOf('base64,')>=0){ const sid=wb.addImage({base64:SEAL.split('base64,')[1],extension:'png'}); ws.addImage(sid,{tl:{col:6.05,row:2.35},ext:{width:64,height:64}}); } }catch(e){}
+      try{ if(typeof SEAL==='string' && SEAL.indexOf('base64,')>=0){ const _kz=Math.max(24,Math.min(240,((typeof SEAL_LAYOUT!=='undefined'&&SEAL_LAYOUT.ko&&SEAL_LAYOUT.ko.size)||92))); const sid=wb.addImage({base64:SEAL.split('base64,')[1],extension:'png'}); ws.addImage(sid,{tl:{col:6.05,row:2.2},ext:{width:_kz,height:_kz}}); } }catch(e){}
       // 품목 표 (행9 헤더) — 품명 A:B, 수량 C, 단가 D, 금액 E, 비고 F:G
       const HR=9;
       const setHead=(c1,c2,txt,al)=>{ if(c2>c1)ws.mergeCells(HR,c1,HR,c2); const cell=ws.getCell(HR,c1); cell.value=txt; cell.font={bold:true,size:9,color:{argb:'FF333333'}}; cell.alignment={horizontal:al,vertical:'middle'}; for(let c=c1;c<=c2;c++)ws.getCell(HR,c).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF2F2F0'}};};
@@ -6500,7 +6585,7 @@ function drawLines(){
     </tr>`;}).join('');
   tb.querySelectorAll('input').forEach(inp=>{
     const applyNm=(target,tr,i)=>{
-      const it=I.find(x=>x.nm===target.value);
+      const it=resolveItemByName(target.value);
       if(it){const changedItem=(inLines[i].ic!==it.nm);inLines[i].ic=it.nm;if(it.unit)inLines[i].unit=it.unit;if(it.spec&&(changedItem||!inLines[i].spec))inLines[i].spec=it.spec;
         const partyEl=document.getElementById('fParty');const pn=partyEl?partyEl.value.trim():'';
         const dp=autoPrice(it.nm,pn);
@@ -6531,6 +6616,18 @@ function drawLines(){
       refreshDiscCells();
       if(k==='q'||k==='nm') refreshListock();
       inTotals();});
+    // 품명 칸에서 포커스가 빠질 때: 약칭을 정식 품목명으로 치환 + 단가 확정 (제자리 갱신, 재그림 안 함)
+    if(inp.dataset.k==='nm'){ inp.addEventListener('blur',e=>{
+      const tr=e.target.closest('tr'); if(!tr)return; const i=+tr.dataset.i;
+      if(!inLines[i]||inLines[i].disc) return;
+      const it=resolveItemByName(e.target.value);
+      if(!it) return;
+      if(it.nm!==inLines[i].nm){ inLines[i].nm=it.nm; inLines[i].ic=it.nm; e.target.value=it.nm; }
+      if(it.unit) inLines[i].unit=it.unit;
+      if(it.spec && !inLines[i].spec) inLines[i].spec=it.spec;
+      if(!inLines[i]._manual){ const pn=(document.getElementById('fParty')||{}).value||''; const dp=autoPrice(it.nm,pn); if(dp){ inLines[i].pr=dp; const prEl=tr.querySelector('input[data-k="pr"]'); if(prEl) prEl.value=commaFmtVal(dp); } }
+      recalc(i); refreshDiscCells(); refreshListock(); inTotals();
+    }); }
   });
   tb.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{inLines.splice(+b.dataset.del,1);drawLines();inTotals();});
   tb.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{const i=+b.dataset.up; if(i>0){const t=inLines[i-1];inLines[i-1]=inLines[i];inLines[i]=t; drawLines(); inTotals();}});
