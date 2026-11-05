@@ -927,10 +927,18 @@ let ISSUER = (()=>{ try{ const s=localStorage.getItem('sci_issuer'); const o=s?J
 const COMPANY_PRESETS = {
   supionm: { name:'(주)수피오엔엠', reg:'280-88-03431', ceo:'이지은',
     addr:'부산광역시 동구 충장대로160', bizType:'제조업', bizItem:'화장품',
-    biz:'제조업 / 화장품', email:'bill@supionm.com', bank:'기업은행 097-108327-01-017 수피오엔엠' },
+    biz:'제조업 / 화장품', email:'bill@supionm.com', bank:'기업은행 097-108327-01-017 수피오엔엠',
+    en:{ name:'SUPIONM Co,. ltd.', addr1:'40, Dongyeong-ro 22beon-gil, Jung-gu, Busan', addr2:'Republic of Korea',
+         office:'82-10-9156-3169', fax:'0504-176-156', payCur:'USD', payMethod:'T/T Payment',
+         bankName:'Industrial Bank of Korea', bankAddr:'IBK FINANCE TOWER FLOOR 16, EULJI-RO 82, JUNG-GU, SEOUL, REPUBLIC OF KOREA',
+         swift:'IBKOKRSE', account:'097-108327-56-00010', beneficiary:'SUPIONM Co,. ltd.' } },
   mdermalab: { name:'(주)엠더마랩', reg:'739-88-03442', ceo:'이승진',
-    addr:'부산시 사상구 사상로401번길57, 2층(덕포동)', bizType:'제조업', bizItem:'화장품 및 화장용품',
-    biz:'제조업 / 화장품 및 화장용품', email:'bill@supionm.com', bank:'하나은행 161-910045-47905 주식회사 엠더마랩' }
+    addr:'부산광역시 사상구 사상로401번길 57, 2층(덕포동)', bizType:'도매 및 소매업', bizItem:'화장품 및 화장용품 도매업',
+    biz:'도매 및 소매업 / 화장품 및 화장용품 도매업', email:'smahn@supio.co.kr', bank:'하나은행 161-910045-47905 주식회사 엠더마랩',
+    en:{ name:'MDERMALAB Co., Ltd.', addr1:'57, Sasang-ro 401beon-gil, Sasang-gu, Busan', addr2:'Republic of Korea',
+         office:'82-10-9156-3169', fax:'0504-176-156', payCur:'USD', payMethod:'T/T Payment',
+         bankName:'Hana Bank', bankAddr:'HANA BANK, 66, EULJIRO, JUNG-GU, SEOUL, REPUBLIC OF KOREA',
+         swift:'HNBNKRSE', account:'161-910045-47905', beneficiary:'MDERMALAB Co., Ltd.' } }
 };
 let currentCompany = (()=>{ try{ return localStorage.getItem('sci_cur_company')||'supionm'; }catch(e){ return 'supionm'; } })();
 // 엠더마랩 도장
@@ -939,8 +947,11 @@ function setCompany(key){
   const p=COMPANY_PRESETS[key]; if(!p) return;
   currentCompany=key;
   try{ localStorage.setItem('sci_cur_company',key); }catch(e){}
-  ISSUER=Object.assign({}, p);
+  const {en, ...ko}=p;
+  ISSUER=Object.assign({}, ko);
   try{ localStorage.setItem('sci_issuer', JSON.stringify(ISSUER)); }catch(e){}
+  // 영문 INVOICE 정보도 회사별로 전환
+  if(en && typeof INV_SUPPLIER!=='undefined'){ INV_SUPPLIER=Object.assign({}, en); try{ localStorage.setItem('sci_inv_supplier', JSON.stringify(INV_SUPPLIER)); }catch(e){} }
   // 도장도 회사별로 교체
   if(key==='mdermalab'){ SEAL=MDERMA_SEAL; }
   else { SEAL=SEAL_DEFAULT; }
@@ -3835,6 +3846,11 @@ function drawIssuerPane(){
   const F=(id,lbl,val,ph)=>`<div class="fld"><label>${lbl}</label><input id="${id}" value="${esc(val||'')}" placeholder="${ph||''}"></div>`;
   body.innerHTML=`<div class="card panel" style="max-width:860px">
     <div class="panel-head"><h3>사용자 업체등록</h3><span class="hint">견적서·거래명세서·발주서의 “발급자(공급자)” 정보로 사용됩니다.</span></div>
+    <div style="display:flex;align-items:center;gap:10px;margin:2px 0 10px;padding:8px 12px;background:var(--surface-2);border-radius:8px">
+      <span style="font-size:12.5px;color:var(--ink-soft)">현재 편집 중인 회사</span>
+      <b style="font-size:14px;color:var(--brand)">${currentCompany==='mdermalab'?'(주)엠더마랩':'(주)수피오엔엠'}</b>
+      <button class="btn sm" id="companyToggleIssuer" style="margin-left:auto;border-color:var(--brand);color:var(--brand);font-weight:700">🔄 ${currentCompany==='mdermalab'?'수피오엔엠으로':'엠더마랩으로'} 변경</button>
+    </div>
     <div class="form" style="max-width:none">
       <div class="frow">${F('isReg','등록번호',ISSUER.reg,'000-00-00000')}${F('isName','상호',ISSUER.name)}${F('isCeo','대표',ISSUER.ceo)}</div>
       <div class="frow">${F('isBizType','업태',ISSUER.bizType)}${F('isBizItem','종목',ISSUER.bizItem)}${F('isTel','대표번호',ISSUER.tel)}</div>
@@ -3952,13 +3968,23 @@ function drawIssuerPane(){
     if(typeof markChange==='function')markChange();
     document.getElementById('isMsg').innerHTML=`<div class="banner ok" style="margin-top:12px">✓ 사용자 업체등록 정보가 저장되었습니다. 문서(견적서·거래명세서·발주서)에 즉시 반영됩니다.</div>`;
   };
-  document.getElementById('isRestore').onclick=()=>{
-    if(!confirm('발급자 정보와 직인을 기본값으로 되돌릴까요?'))return;
-    ISSUER=Object.assign({}, ISSUER_DEFAULT);
-    SEAL=SEAL_DEFAULT;
-    INV_SUPPLIER=Object.assign({}, INV_SUPPLIER_DEFAULT);
-    try{ localStorage.removeItem('sci_issuer'); localStorage.removeItem('sci_seal'); localStorage.removeItem('sci_inv_supplier'); }catch(e){}
+  // 엠더마랩 ↔ 수피오엔엠 전환 (국문+영문+직인 함께, 설정 패널만 다시 그림)
+  const _applyCompany=(key)=>{
+    const p=COMPANY_PRESETS[key]; if(!p) return;
+    currentCompany=key;
+    const {en, ...ko}=p;
+    ISSUER=Object.assign({}, ko);
+    if(en){ INV_SUPPLIER=Object.assign({}, en); }
+    SEAL = (key==='mdermalab') ? MDERMA_SEAL : SEAL_DEFAULT;
+    try{ localStorage.setItem('sci_cur_company',key); localStorage.setItem('sci_issuer', JSON.stringify(ISSUER)); localStorage.setItem('sci_inv_supplier', JSON.stringify(INV_SUPPLIER)); localStorage.setItem('sci_seal', SEAL); }catch(e){}
+    if(typeof markChange==='function') markChange();
     drawIssuerPane();
+  };
+  const _ctb=document.getElementById('companyToggleIssuer');
+  if(_ctb) _ctb.onclick=()=>_applyCompany(currentCompany==='supionm'?'mdermalab':'supionm');
+  document.getElementById('isRestore').onclick=()=>{
+    if(!confirm('발급자 정보와 직인을 수피오엔엠 기본값으로 되돌릴까요?'))return;
+    _applyCompany('supionm');
   };
 }
 
@@ -4833,6 +4859,7 @@ function docLangMode(){ if(docLangs.ko&&docLangs.en)return 'both'; if(docLangs.e
 /* 발주 등록 현재 입력값 → 문서용 데이터 */
 function entryDocData(){
   const to=(document.getElementById('fParty')||{}).value||'';
+  curDocNo = resolveDocNo();   // 거래번호: 저장된 배치면 고정 번호, 아니면 다음 번호(미리보기)
   const date=(document.getElementById('fDate')||{}).value||todayStr();
   const memo=(document.getElementById('fNote')||{}).value||'';
   const vat=(document.getElementById('fVat')||{}).value||'과세';
@@ -5337,7 +5364,7 @@ function packingDefaults(cust,date,lines){
   const marksAuto = (totBoxes>0 ? ('C/NO 1-'+totBoxes) : 'C/NO 1') + (dimSet.length? ('\n'+dimSet.join('\n')) : '');
   const hsFixed='skinbooster 3304.99-1000\nstand 7306.90-9000\ndevice 8543.70-2020';
   return {
-    invNo:'SPNM-001-'+yy, invDate:date||todayStr(),
+    invNo:(typeof curDocNo!=='undefined'&&curDocNo)?curDocNo:(typeof peekDocNo==='function'?peekDocNo():'SPNM-001-'+yy), invDate:date||todayStr(),
     consignee:String(cust.addrEn||cust.nmEn||cust.nm||'').replace(/ {2,}/g,'\n'),
     notify:'', portLoading:'Busan Port, KOREA.', finalDest:'',
     carrier:'', sailing:'', marks: marksAuto,
@@ -5866,7 +5893,7 @@ async function saveEntryDocBoth(excelOnly){
       const _minRows=Math.max(drows.length,13); const _sumRow=10+_minRows; const _finalRow=_sumRow+(isBreak?2:0);
       const _totFormula = isBreak ? ('E'+_finalRow) : ('SUM(E10:E'+(9+_minRows)+')'); // 합계행 없으면 품목 금액 합(HR=9 → 첫 품목행 10)
       const headTot = isAdd3 ? supplyTot : total;
-      const LV=[['수신',(cust.nm||to)+' 귀하',false],['합계금액'+totTag,headTot,true],['공급일자',dk,false]];
+      const LV=[[(docKind==='quote'?'견적번호':'청구번호'),curDocNo||'',false],['수신',(cust.nm||to)+' 귀하',false],['합계금액'+totTag,headTot,true],['공급일자',dk,false]];
       LV.forEach((row,i)=>{const r=3+i;const kc=ws.getCell(r,1);kc.value=row[0];kc.font={size:9,color:{argb:'FF888888'}};kc.alignment={vertical:'middle'};kc.border=bb;
         ws.mergeCells(r,2,r,3);const vc2=ws.getCell(r,2);vc2.alignment={vertical:'middle',horizontal:'left'};vc2.border=bb;ws.getCell(r,3).border=bb;
         if(row[2]){vc2.value={formula:_totFormula,result:headTot};vc2.font={bold:true,size:13,color:{argb:'FFC0392B'}};vc2.numFmt=fmtN;}else{vc2.value=row[1];vc2.font={size:10};}
@@ -6831,6 +6858,11 @@ function _saveEntryCore(_unlock){
       const vc=vatCalc(lineAmt(l.q,l.pr),mode);
       rows.push({id:uid(),batch,d,g,p,a:acc0,m:m||l.nm,ic:l.ic||'',inm:l.nm,spec:l.spec||'',u:l.unit||'ea',q:l.q||0,pr:l.pr||0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,bigo:l.bigo||'',vat:mode,seq:_seq,_u:1});});
   }
+  // 거래번호(rn): 기존 배치에 있으면 유지, 없으면 새 번호 소비 (USER에서 제거하기 전에 조회)
+  let _docRn = editing ? ((USER.find(r=>r.batch===batch && r.rn)||{}).rn) : '';
+  if(!_docRn) _docRn = consumeDocNo();
+  rows.forEach(r=>{ r.rn=_docRn; });
+  curDocNo=_docRn;
   if(editing){
     const rm=new Set(entryEditIds);
     // 기존 기록 제거: id 뿐 아니라 같은 batch(같은 거래명세서) 전체를 지운 뒤 새로 씀
@@ -9905,11 +9937,18 @@ const INV_SUPPLIER_DEFAULT = {
   swift:'IBKOKRSE', account:'097-108327-56-00010', beneficiary:'SUPIONM Co,. ltd.'
 };
 let INV_SUPPLIER = (()=>{ try{ const s=localStorage.getItem('sci_inv_supplier'); const o=s?JSON.parse(s):{}; return Object.assign({}, INV_SUPPLIER_DEFAULT, o); }catch(e){ return Object.assign({}, INV_SUPPLIER_DEFAULT); } })();
-function invRefNo(dateStr){
-  const d=new Date(dateStr); if(isNaN(d)) return 'SPNM-001-';
-  const yy=String(d.getFullYear()).slice(2), mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-  return 'SPNM-001-'+yy+mm+dd;
-}
+// ===== 문서 거래번호 (회사별 자동 순번) : SPNM-001-YYMMDD =====
+let DOC_SEQ = (()=>{ try{ const s=localStorage.getItem('sci_doc_seq'); const o=s?JSON.parse(s):null; return (o&&typeof o==='object')?o:{supionm:0,mdermalab:0}; }catch(e){ return {supionm:0,mdermalab:0}; } })();
+function saveDocSeq(){ try{ localStorage.setItem('sci_doc_seq', JSON.stringify(DOC_SEQ)); }catch(e){} }
+function docPrefix(key){ const k=key||(typeof currentCompany!=='undefined'?currentCompany:'supionm'); return k==='mdermalab'?'M':'SPNM'; }
+function _ymd6(dateStr){ const d=dateStr?new Date(dateStr):new Date(); const dd=isNaN(d)?new Date():d; return String(dd.getFullYear()).slice(2)+String(dd.getMonth()+1).padStart(2,'0')+String(dd.getDate()).padStart(2,'0'); }
+function fmtDocNo(seq, dateStr, key){ return docPrefix(key)+'-'+String(seq).padStart(3,'0')+'-'+_ymd6(dateStr); }
+function peekDocNo(){ const k=(typeof currentCompany!=='undefined'?currentCompany:'supionm'); return fmtDocNo((DOC_SEQ[k]||0)+1, todayStr(), k); }     // 다음 번호(소비 안 함)
+function consumeDocNo(){ const k=(typeof currentCompany!=='undefined'?currentCompany:'supionm'); DOC_SEQ[k]=(DOC_SEQ[k]||0)+1; saveDocSeq(); if(typeof markChange==='function')markChange(); return fmtDocNo(DOC_SEQ[k], todayStr(), k); }  // 저장 시 소비
+let curDocNo = '';   // 현재 미리보기/문서에 표시할 거래번호
+// 저장된 배치의 번호가 있으면 그걸, 없으면 다음 번호(미리보기)를 반환
+function resolveDocNo(){ try{ if(typeof entryEditBatch!=='undefined' && entryEditBatch){ const r=USER.find(x=>x.batch===entryEditBatch && x.rn); if(r&&r.rn) return r.rn; } }catch(e){} return peekDocNo(); }
+function invRefNo(dateStr){ return curDocNo || resolveDocNo(); }  // 영문 INVOICE Ref.No도 동일 번호 사용
 function invDate(dateStr){ const d=new Date(dateStr); if(isNaN(d)) return esc(dateStr||''); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function invoiceDocHTML(cust, dateStr, lines, withId, vatMode, curSym){
   const sym = curSym || (typeof invCurSym==='function' ? invCurSym() : '$');
@@ -10048,6 +10087,7 @@ function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode)
      </div>
      <div class="dtop">
        <div class="dleft">
+         <div class="lrow"><span class="lk">${isEn?'No.':(docKind==='quote'?'견적번호':'청구번호')}</span><span class="lv" style="font-weight:700;letter-spacing:.3px">${esc(curDocNo||'')}</span></div>
          <div class="lrow"><span class="lk">${isEn?'To':'수신'}</span><span class="lv">${esc(recvName)}${(!isEn&&recvName)?' 귀하':''}</span></div>
          <div class="lrow big"><span class="lk">${isEn?'Total':'합계금액'}${totTag}</span><span class="lv" style="color:#c0392b">${sym}${fmt(isAdd3?supplyTot:total)}</span></div>
          <div class="lrow"><span class="lk">${isEn?'Date':'공급일자'}</span><span class="lv">${esc(dateK)}</span></div>
