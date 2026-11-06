@@ -4774,7 +4774,7 @@ let inMode='sale';
 let inLines=[{ic:'',nm:'',spec:'',unit:'ea',q:1,pr:0,bigo:''}]; // 품목 라인
 let entryDraft={party:'',date:'',memo:'',pay:'계좌이체',vat:'과세포함'}; // 발주 등록 작성중 상태 (메뉴 이동해도 유지)
 let entryAutoLoaded=false; // 이전 거래를 자동 불러온 상태인지 (사용자 편집 시 false)
-function entryDraftClear(){ entryDraft={party:'',date:'',memo:'',pay:'계좌이체',vat:'과세'}; entryEditIds=null; entryEditBatch=null; entryPrType=null; }
+function entryDraftClear(){ entryDraft={party:'',date:'',memo:'',pay:'계좌이체',vat:'과세',docNo:'',docNoManual:false}; entryEditIds=null; entryEditBatch=null; entryPrType=null; }
 function modeG(){return '수입';}        // 거래 구분
 function modeAccts(){
   return S.수입계정||['매출'];
@@ -4859,7 +4859,7 @@ function docLangMode(){ if(docLangs.ko&&docLangs.en)return 'both'; if(docLangs.e
 /* 발주 등록 현재 입력값 → 문서용 데이터 */
 function entryDocData(){
   const to=(document.getElementById('fParty')||{}).value||'';
-  curDocNo = resolveDocNo();   // 거래번호: 저장된 배치면 고정 번호, 아니면 다음 번호(미리보기)
+  curDocNo = ((document.getElementById('fDocNo')||{}).value||'').trim() || resolveDocNo();   // 청구번호: 왼쪽 작성칸 값(수정 가능) 우선, 없으면 저장번호/다음번호
   const date=(document.getElementById('fDate')||{}).value||todayStr();
   const memo=(document.getElementById('fNote')||{}).value||'';
   const vat=(document.getElementById('fVat')||{}).value||'과세';
@@ -5893,7 +5893,7 @@ async function saveEntryDocBoth(excelOnly){
       const _minRows=Math.max(drows.length,13); const _sumRow=10+_minRows; const _finalRow=_sumRow+(isBreak?2:0);
       const _totFormula = isBreak ? ('E'+_finalRow) : ('SUM(E10:E'+(9+_minRows)+')'); // 합계행 없으면 품목 금액 합(HR=9 → 첫 품목행 10)
       const headTot = isAdd3 ? supplyTot : total;
-      const LV=[[(docKind==='quote'?'견적번호':'청구번호'),curDocNo||'',false],['수신',(cust.nm||to)+' 귀하',false],['합계금액'+totTag,headTot,true],['공급일자',dk,false]];
+      const LV=[['수신',(cust.nm||to)+' 귀하',false],['합계금액'+totTag,headTot,true],['공급일자',dk,false],[(docKind==='quote'?'견적번호':'청구번호'),curDocNo||'',false]];
       LV.forEach((row,i)=>{const r=3+i;const kc=ws.getCell(r,1);kc.value=row[0];kc.font={size:9,color:{argb:'FF888888'}};kc.alignment={vertical:'middle'};kc.border=bb;
         ws.mergeCells(r,2,r,3);const vc2=ws.getCell(r,2);vc2.alignment={vertical:'middle',horizontal:'left'};vc2.border=bb;ws.getCell(r,3).border=bb;
         if(row[2]){vc2.value={formula:_totFormula,result:headTot};vc2.font={bold:true,size:13,color:{argb:'FFC0392B'}};vc2.numFmt=fmtN;}else{vc2.value=row[1];vc2.font={size:10};}
@@ -6324,6 +6324,8 @@ function drawInForm(){
        <div class="fld"><label>거래처</label><input id="fParty" list="dlParty" value="${isExp?esc(ISSUER.name):esc(entryDraft.party||'')}" placeholder="거래처명 입력/선택"></div>
      </div>
 
+     <div class="fld"><label>${(typeof docKind!=='undefined'&&docKind==='quote')?'견적번호':'청구번호'}</label><input id="fDocNo" value="${esc(entryDraft.docNo || (typeof resolveDocNo==='function'?resolveDocNo():''))}" placeholder="자동생성 (수정 가능)"></div>
+
      ${isExp ? `
      <div class="fld"><label>계정과목</label><input id="fAcct" list="dlAcct" value="" placeholder="계정과목 입력(선택)"></div>
      <div class="fld"><label>합계금액</label><input id="fAmt" class="r" inputmode="numeric" placeholder="숫자만 입력 (예: 2,500,000)" oninput="commaApply(this);inTotals()"></div>
@@ -6399,8 +6401,15 @@ function drawInForm(){
   inTotals();
   const fvat=document.getElementById('fVat'); if(fvat) fvat.onchange=()=>{entryDraft.vat=fvat.value;inTotals();};
   const fpay=document.getElementById('fPay'); if(fpay) fpay.onchange=()=>{entryDraft.pay=fpay.value;};
-  const fd=document.getElementById('fDate'); if(fd) fd.addEventListener('input',()=>{entryDraft.date=fd.value;if(typeof updateEntryDoc==='function')updateEntryDoc();if(typeof refreshListock==='function')refreshListock();});
+  const fd=document.getElementById('fDate'); if(fd) fd.addEventListener('input',()=>{
+    entryDraft.date=fd.value;
+    // 작성일자가 바뀌면 자동 생성된 청구번호의 날짜부도 함께 갱신 (사용자가 직접 수정한 번호는 유지)
+    if(!entryDraft.docNoManual && !(typeof entryEditBatch!=='undefined'&&entryEditBatch)){
+      const dn=document.getElementById('fDocNo'); const nv=peekDocNo(); if(dn)dn.value=nv; entryDraft.docNo=nv;
+    }
+    if(typeof updateEntryDoc==='function')updateEntryDoc();if(typeof refreshListock==='function')refreshListock();});
   const fn=document.getElementById('fNote'); if(fn) fn.addEventListener('input',()=>{entryDraft.memo=fn.value;if(typeof updateEntryDoc==='function')updateEntryDoc();});
+  const fdn=document.getElementById('fDocNo'); if(fdn) fdn.addEventListener('input',()=>{entryDraft.docNo=fdn.value;entryDraft.docNoManual=true;if(typeof updateEntryDoc==='function')updateEntryDoc();});
   document.getElementById('inSave').onclick=saveEntry;
   document.getElementById('inReset').onclick=()=>{previewEdit=false;inLines=[{ic:'',nm:'',spec:'',unit:'ea',q:1,pr:0,bigo:''}];entryAutoLoaded=false;entryDraftClear();drawInForm();updateEntryDoc();};
   const dp=document.getElementById('docPrint'); if(dp) dp.onclick=()=>{ if(!ensureEntryDoc())return; printDoc(entryDocName()); };
@@ -6773,6 +6782,8 @@ function loadEntryFromBatch(rows){
   inMode='sale';
   entryDraft.party=h.p||'';
   entryDraft.date=h.d||todayStr();
+  entryDraft.docNo=(rows.find(r=>r.rn)||{}).rn||'';   // 저장된 청구번호를 왼쪽 작성칸으로 복원
+  entryDraft.docNoManual=true;   // 저장된 번호는 고정(날짜 바꿔도 번호 날짜부 유지)
   entryDraft.memo=h.note||'';
   entryDraft.pay=h.pm||'계좌이체';
   // 거래에 저장된 vat가 있으면 그대로 복원(과세별도 등 유지), 없으면 거래처 기본값
@@ -6858,8 +6869,10 @@ function _saveEntryCore(_unlock){
       const vc=vatCalc(lineAmt(l.q,l.pr),mode);
       rows.push({id:uid(),batch,d,g,p,a:acc0,m:m||l.nm,ic:l.ic||'',inm:l.nm,spec:l.spec||'',u:l.unit||'ea',q:l.q||0,pr:l.pr||0,s:vc.s,v:vc.v,t:vc.t,pm:pm||'',tax:'',note,bigo:l.bigo||'',vat:mode,seq:_seq,_u:1});});
   }
-  // 거래번호(rn): 기존 배치에 있으면 유지, 없으면 새 번호 소비 (USER에서 제거하기 전에 조회)
-  let _docRn = editing ? ((USER.find(r=>r.batch===batch && r.rn)||{}).rn) : '';
+  // 청구번호(rn): 왼쪽 작성칸(fDocNo) 값이 있으면 그걸 그대로 저장(수정·추가 가능),
+  //  없으면 기존 배치 번호 유지, 그것도 없으면 다음 번호 자동 생성
+  let _docRn = ((document.getElementById('fDocNo')||{}).value||'').trim();
+  if(!_docRn) _docRn = editing ? ((USER.find(r=>r.batch===batch && r.rn)||{}).rn) : '';
   if(!_docRn) _docRn = consumeDocNo();
   rows.forEach(r=>{ r.rn=_docRn; });
   curDocNo=_docRn;
@@ -9943,9 +9956,13 @@ function saveDocSeq(){ try{ localStorage.setItem('sci_doc_seq', JSON.stringify(D
 function docPrefix(key){ const k=key||(typeof currentCompany!=='undefined'?currentCompany:'supionm'); return k==='mdermalab'?'M':'SPNM'; }
 function _ymd6(dateStr){ const d=dateStr?new Date(dateStr):new Date(); const dd=isNaN(d)?new Date():d; return String(dd.getFullYear()).slice(2)+String(dd.getMonth()+1).padStart(2,'0')+String(dd.getDate()).padStart(2,'0'); }
 function fmtDocNo(seq, dateStr, key){ return docPrefix(key)+'-'+String(seq).padStart(3,'0')+'-'+_ymd6(dateStr); }
-function peekDocNo(){ const k=(typeof currentCompany!=='undefined'?currentCompany:'supionm'); return fmtDocNo((DOC_SEQ[k]||0)+1, todayStr(), k); }     // 다음 번호(소비 안 함)
-function consumeDocNo(){ const k=(typeof currentCompany!=='undefined'?currentCompany:'supionm'); DOC_SEQ[k]=(DOC_SEQ[k]||0)+1; saveDocSeq(); if(typeof markChange==='function')markChange(); return fmtDocNo(DOC_SEQ[k], todayStr(), k); }  // 저장 시 소비
-let curDocNo = '';   // 현재 미리보기/문서에 표시할 거래번호
+// 다음 순번 = 저장된 거래들 중 같은 접두어의 최대 번호 + 1 (데이터 기반 → 삭제/수정에도 안정적)
+function maxDocSeq(key){ const pre=docPrefix(key)+'-'; let mx=Math.max(0, (DOC_SEQ&&DOC_SEQ[key])||0); try{ (USER||[]).forEach(r=>{ if(r.rn && r.rn.indexOf(pre)===0){ const m=/^[A-Za-z]+-0*(\d+)-/.exec(r.rn); if(m){ const n=parseInt(m[1],10); if(n>mx)mx=n; } } }); }catch(e){} return mx; }
+// 청구번호 날짜부(-YYMMDD)는 작성일자(fDate) 기준
+function _docDate(){ try{ const el=document.getElementById('fDate'); if(el&&el.value) return el.value; }catch(e){} return (typeof entryDraft!=='undefined'&&entryDraft.date)?entryDraft.date:todayStr(); }
+function peekDocNo(dateStr){ const k=(typeof currentCompany!=='undefined'?currentCompany:'supionm'); return fmtDocNo(maxDocSeq(k)+1, dateStr||_docDate(), k); }     // 다음 번호(작성일자 기준)
+function consumeDocNo(){ return peekDocNo(); }  // 번호는 거래에 저장되므로 별도 카운터 소비 없음
+let curDocNo = '';   // 현재 미리보기/문서에 표시할 청구번호
 // 저장된 배치의 번호가 있으면 그걸, 없으면 다음 번호(미리보기)를 반환
 function resolveDocNo(){ try{ if(typeof entryEditBatch!=='undefined' && entryEditBatch){ const r=USER.find(x=>x.batch===entryEditBatch && x.rn); if(r&&r.rn) return r.rn; } }catch(e){} return peekDocNo(); }
 function invRefNo(dateStr){ return curDocNo || resolveDocNo(); }  // 영문 INVOICE Ref.No도 동일 번호 사용
@@ -10087,10 +10104,10 @@ function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode)
      </div>
      <div class="dtop">
        <div class="dleft">
-         <div class="lrow"><span class="lk">${isEn?'No.':(docKind==='quote'?'견적번호':'청구번호')}</span><span class="lv" style="font-weight:700;letter-spacing:.3px">${esc(curDocNo||'')}</span></div>
          <div class="lrow"><span class="lk">${isEn?'To':'수신'}</span><span class="lv">${esc(recvName)}${(!isEn&&recvName)?' 귀하':''}</span></div>
          <div class="lrow big"><span class="lk">${isEn?'Total':'합계금액'}${totTag}</span><span class="lv" style="color:#c0392b">${sym}${fmt(isAdd3?supplyTot:total)}</span></div>
          <div class="lrow"><span class="lk">${isEn?'Date':'공급일자'}</span><span class="lv">${esc(dateK)}</span></div>
+         <div class="lrow"><span class="lk">${isEn?'No.':(docKind==='quote'?'견적번호':'청구번호')}</span><span class="lv" style="font-weight:700;letter-spacing:.3px">${esc(curDocNo||'')}</span></div>
        </div>
        <div class="dright">
          ${SEAL?`<img class="seal" style="${sealStyleKo()}" src="${SEAL}" alt="">`:''}
