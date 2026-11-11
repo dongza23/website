@@ -6019,8 +6019,8 @@ async function saveEntryDocBoth(excelOnly){
       if(!hasDisc){
         // 할인 없음: 기존처럼 Total 한 줄
         TR=r;
-        ws.mergeCells(TR,1,TR,3);const tt=ws.getCell(TR,1);tt.value='Total';tt.font={name:'Arial Narrow',bold:true,size:10};tt.alignment={horizontal:'center',vertical:'middle'};
-        const teu=ws.getCell(TR,5);teu.value={formula:'SUM(E'+_r1+':E'+_r2+')',result:tp};teu.numFmt=invNumFmt;teu.font={name:'Arial Narrow',bold:true,size:10};teu.alignment={horizontal:'right',vertical:'middle'};
+        ws.mergeCells(TR,1,TR,4);const tt=ws.getCell(TR,1);tt.value='Total';tt.font={name:'Arial Narrow',bold:true,size:10};tt.alignment={horizontal:'center',vertical:'middle'};
+        ws.getCell(TR,5).value='';  // 단가(Unit Price) 칸은 합계행에 표시하지 않음
         const tea=ws.getCell(TR,6);tea.value={formula:'SUM(F'+_r1+':F'+_r2+')',result:ta};tea.numFmt=invNumFmt;tea.font={name:'Arial Narrow',bold:true,size:10,color:{argb:'FFFF0000'}};tea.alignment={horizontal:'right',vertical:'middle'};
         ws.getRow(TR).height=20;
       } else {
