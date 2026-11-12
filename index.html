@@ -5890,8 +5890,14 @@ async function saveEntryDocBoth(excelOnly){
       const vatTot=total-supplyTot; // 부가세
       // 좌측 정보 (행3~5) — 라벨 A, 값 B:C(좌측정렬), 하단 구분선
       const bb={bottom:{style:'thin',color:{argb:'FFDDDDDD'}}};
-      const _minRows=Math.max(drows.length,13); const _sumRow=10+_minRows; const _finalRow=_sumRow+(isBreak?2:0);
-      const _totFormula = isBreak ? ('E'+_finalRow) : ('SUM(E10:E'+(9+_minRows)+')'); // 합계행 없으면 품목 금액 합(HR=9 → 첫 품목행 10)
+      const _minRows=Math.max(drows.length,13); const _sumRow=10+_minRows;
+      // 최종합계가 표시되는 행 계산 → 상단 합계금액이 '총액' 셀을 그대로 참조해야
+      // 엑셀에서 재계산해도 할인이 반영됨 (품목행만 SUM하면 할인 전 금액으로 나오는 문제 수정)
+      let _finalRow;
+      if(isBreak) _finalRow=_sumRow+2;                                     // 공급가액/부가세/최종합계(3줄)
+      else if(discRowsK2.length>0) _finalRow=_sumRow+1+discRowsK2.length;   // 소계 + 할인 N줄 + 총액
+      else _finalRow=_sumRow;                                              // 총액(또는 공급가액) 1줄
+      const _totFormula = (isBreak||discRowsK2.length>0) ? ('E'+_finalRow) : ('SUM(E10:E'+(9+_minRows)+')');
       const headTot = isAdd3 ? supplyTot : total;
       const LV=[['수신',(cust.nm||to)+' 귀하',false],['합계금액'+totTag,headTot,true],['공급일자',dk,false],[(docKind==='quote'?'견적번호':'청구번호'),curDocNo||'',false]];
       LV.forEach((row,i)=>{const r=3+i;const kc=ws.getCell(r,1);kc.value=row[0];kc.font={size:9,color:{argb:'FF888888'}};kc.alignment={vertical:'middle'};kc.border=bb;
@@ -5943,7 +5949,7 @@ async function saveEntryDocBoth(excelOnly){
         const rSub=rr;
         putSumRow(rr,'소계',{formula:'SUM(E'+_firstItem+':E'+_lastItem+')',result:subTotK2}); rr++;
         const discRowNums=[];
-        discRowsK2.forEach(d=>{ const _tg=(d.tgt&&d.tgt.length)?' ['+d.tgt.join(', ')+']':''; putSumRow(rr, d.nm+_tg+(d.bigo?' ('+d.bigo+')':''), d.amt, {lf:{bold:false},vf:{bold:false}}); discRowNums.push(rr); rr++; });
+        discRowsK2.forEach(d=>{ putSumRow(rr, d.nm+(d.bigo?' ('+d.bigo+')':''), d.amt, {lf:{bold:false},vf:{bold:false}}); discRowNums.push(rr); rr++; });
         // 총액 = 소계 + 모든 할인 (수식) → 엑셀에서 값 바꾸면 자동 재계산
         const _totFormula2='E'+rSub+(discRowNums.length?('+'+discRowNums.map(n=>'E'+n).join('+')):'');
         putSumRow(rr,'총액',{formula:_totFormula2,result:total},{lf:{size:11},vf:{size:11}});
@@ -9607,7 +9613,7 @@ function drawQDoc(){
        <th style="width:24%">${isEn?'Item':'품명'}</th><th>${isEn?'Spec':'규격/옵션'}</th><th style="width:8%">${isEn?'Unit':'단위'}</th><th style="width:8%">${isEn?'Qty':'수량'}</th><th style="width:13%">${isEn?'Price':'단가'}</th><th style="width:15%">${isEn?'Amount':'공급가액'}</th><th style="width:13%">VAT</th>
      </tr></thead><tbody>${body}${pad}${discListK.length>0 ? `
         <tr class="sum"><td colspan="3" class="c" style="font-weight:700">소계</td><td class="cur" style="font-weight:700"><span class="cs">${sym}</span>${fmt(subTotK)}</td><td></td></tr>
-        ${discListK.map(d=>`<tr><td colspan="3" class="c" style="color:#c0392b">${esc(d.nm)}${(d.tgt&&d.tgt.length)?' <span style="font-size:11px;color:#999">['+d.tgt.map(esc).join(', ')+']</span>':''}${d.bigo?' ('+esc(d.bigo)+')':''}</td><td class="cur" style="color:#c0392b">${d.amt<0?'-':''}<span class="cs">${sym}</span>${fmt(Math.abs(d.amt))}</td><td></td></tr>`).join('')}
+        ${discListK.map(d=>`<tr><td colspan="3" class="c" style="color:#c0392b">${esc(d.nm)}${d.bigo?' ('+esc(d.bigo)+')':''}</td><td class="cur" style="color:#c0392b">${d.amt<0?'-':''}<span class="cs">${sym}</span>${fmt(Math.abs(d.amt))}</td><td></td></tr>`).join('')}
         <tr class="sum"><td colspan="3" class="c" style="font-weight:800;font-size:14px">총액</td><td class="cur" style="font-weight:800;font-size:14px;color:#c0392b"><span class="cs">${sym}</span>${fmt(total)}</td><td></td></tr>` : ''}</tbody>
      <tbody><tr class="sum"><td colspan="5" class="r">${isEn?'Total':'합계'}</td><td class="r">${sym}${fmt(s)}</td><td class="r">${sym}${fmt(v)}</td></tr></tbody>
      </table>
@@ -10124,7 +10130,7 @@ function orderDocHTML(cust, dateStr, due, memoArr, lines, isEn, withId, vatMode)
        <th style="width:34%">${isEn?'Item':'품명'}</th><th style="width:9%">${isEn?'Qty':'수량'}</th><th style="width:16%">${isEn?'Price':'단가'}</th><th style="width:18%">${isEn?'Amount':'금액'}${amtTag}</th><th>${isEn?'Remarks':'비고'}</th>
      </tr></thead><tbody>${body}${pad}${discListK.length>0 ? `
         <tr class="sum"><td colspan="3" class="c" style="font-weight:700">소계</td><td class="cur" style="font-weight:700"><span class="cs">${sym}</span>${fmt(subTotK)}</td><td></td></tr>
-        ${discListK.map(d=>`<tr><td colspan="3" class="c" style="color:#c0392b">${esc(d.nm)}${(d.tgt&&d.tgt.length)?' <span style="font-size:11px;color:#999">['+d.tgt.map(esc).join(', ')+']</span>':''}${d.bigo?' ('+esc(d.bigo)+')':''}</td><td class="cur" style="color:#c0392b">${d.amt<0?'-':''}<span class="cs">${sym}</span>${fmt(Math.abs(d.amt))}</td><td></td></tr>`).join('')}
+        ${discListK.map(d=>`<tr><td colspan="3" class="c" style="color:#c0392b">${esc(d.nm)}${d.bigo?' ('+esc(d.bigo)+')':''}</td><td class="cur" style="color:#c0392b">${d.amt<0?'-':''}<span class="cs">${sym}</span>${fmt(Math.abs(d.amt))}</td><td></td></tr>`).join('')}
         <tr class="sum"><td colspan="3" class="c" style="font-weight:800;font-size:14px">총액</td><td class="cur" style="font-weight:800;font-size:14px;color:#c0392b"><span class="cs">${sym}</span>${fmt(isAdd3?supplyTot:total)}</td><td></td></tr>` : ''}</tbody>
      ${isBreak?`<tbody>
           <tr class="sum"><td colspan="3" class="c">${isEn?'Subtotal':'합계 (공급가액)'}</td><td class="cur"><span class="cs">${sym}</span>${fmt(supplyTot)}</td><td></td></tr>
