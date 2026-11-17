@@ -9963,10 +9963,11 @@ function docPrefix(key){ const k=key||(typeof currentCompany!=='undefined'?curre
 function _ymd6(dateStr){ const d=dateStr?new Date(dateStr):new Date(); const dd=isNaN(d)?new Date():d; return String(dd.getFullYear()).slice(2)+String(dd.getMonth()+1).padStart(2,'0')+String(dd.getDate()).padStart(2,'0'); }
 function fmtDocNo(seq, dateStr, key){ return docPrefix(key)+'-'+String(seq).padStart(3,'0')+'-'+_ymd6(dateStr); }
 // 다음 순번 = 저장된 거래들 중 같은 접두어의 최대 번호 + 1 (데이터 기반 → 삭제/수정에도 안정적)
-function maxDocSeq(key){ const pre=docPrefix(key)+'-'; let mx=Math.max(0, (DOC_SEQ&&DOC_SEQ[key])||0); try{ (USER||[]).forEach(r=>{ if(r.rn && r.rn.indexOf(pre)===0){ const m=/^[A-Za-z]+-0*(\d+)-/.exec(r.rn); if(m){ const n=parseInt(m[1],10); if(n>mx)mx=n; } } }); }catch(e){} return mx; }
+// 같은 '작성일자(YYMMDD)'의 거래만 세어 최대 순번 반환 → 날짜가 바뀌면 001부터 다시 시작
+function maxDocSeq(key, dateStr){ const pre=docPrefix(key)+'-'; const suf='-'+_ymd6(dateStr||_docDate()); let mx=0; try{ (USER||[]).forEach(r=>{ if(r.rn && r.rn.indexOf(pre)===0 && r.rn.slice(-suf.length)===suf){ const m=/^[A-Za-z]+-0*(\d+)-/.exec(r.rn); if(m){ const n=parseInt(m[1],10); if(n>mx)mx=n; } } }); }catch(e){} return mx; }
 // 청구번호 날짜부(-YYMMDD)는 작성일자(fDate) 기준
 function _docDate(){ try{ const el=document.getElementById('fDate'); if(el&&el.value) return el.value; }catch(e){} return (typeof entryDraft!=='undefined'&&entryDraft.date)?entryDraft.date:todayStr(); }
-function peekDocNo(dateStr){ const k=(typeof currentCompany!=='undefined'?currentCompany:'supionm'); return fmtDocNo(maxDocSeq(k)+1, dateStr||_docDate(), k); }     // 다음 번호(작성일자 기준)
+function peekDocNo(dateStr){ const k=(typeof currentCompany!=='undefined'?currentCompany:'supionm'); const d=dateStr||_docDate(); return fmtDocNo(maxDocSeq(k,d)+1, d, k); }     // 다음 번호(작성일자별 001부터)
 function consumeDocNo(){ return peekDocNo(); }  // 번호는 거래에 저장되므로 별도 카운터 소비 없음
 let curDocNo = '';   // 현재 미리보기/문서에 표시할 청구번호
 // 저장된 배치의 번호가 있으면 그걸, 없으면 다음 번호(미리보기)를 반환
@@ -11416,6 +11417,11 @@ function thinBorder(){
 /* ===== 기기 재고현황 모듈 끝 ===== */
 </script>
 
+<!-- ===== 압축 라이브러리 (LZString) : 클라우드 저장 용량 축소 ===== -->
+<script>
+window.LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";var baseReverseDic={};function getBaseValue(alphabet,character){if(!baseReverseDic[alphabet]){baseReverseDic[alphabet]={};for(var i=0;i<alphabet.length;i++){baseReverseDic[alphabet][alphabet.charAt(i)]=i;}}return baseReverseDic[alphabet][character];}var LZString={compressToBase64:function(input){if(input==null)return"";var res=LZString._compress(input,6,function(a){return keyStrBase64.charAt(a);});switch(res.length%4){default:case 0:return res;case 1:return res+"===";case 2:return res+"==";case 3:return res+"=";}},decompressFromBase64:function(input){if(input==null)return"";if(input=="")return null;return LZString._decompress(input.length,32,function(index){return getBaseValue(keyStrBase64,input.charAt(index));});},_compress:function(uncompressed,bitsPerChar,getCharFromInt){if(uncompressed==null)return"";var i,value,context_dictionary={},context_dictionaryToCreate={},context_c="",context_wc="",context_w="",context_enlargeIn=2,context_dictSize=3,context_numBits=2,context_data=[],context_data_val=0,context_data_position=0,ii;for(ii=0;ii<uncompressed.length;ii+=1){context_c=uncompressed.charAt(ii);if(!Object.prototype.hasOwnProperty.call(context_dictionary,context_c)){context_dictionary[context_c]=context_dictSize++;context_dictionaryToCreate[context_c]=true;}context_wc=context_w+context_c;if(Object.prototype.hasOwnProperty.call(context_dictionary,context_wc)){context_w=context_wc;}else{if(Object.prototype.hasOwnProperty.call(context_dictionaryToCreate,context_w)){if(context_w.charCodeAt(0)<256){for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}value=context_w.charCodeAt(0);for(i=0;i<8;i++){context_data_val=(context_data_val<<1)|(value&1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}value=value>>1;}}else{value=1;for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|value;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}value=0;}value=context_w.charCodeAt(0);for(i=0;i<16;i++){context_data_val=(context_data_val<<1)|(value&1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}value=value>>1;}}context_enlargeIn--;if(context_enlargeIn==0){context_enlargeIn=Math.pow(2,context_numBits);context_numBits++;}delete context_dictionaryToCreate[context_w];}else{value=context_dictionary[context_w];for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|(value&1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}value=value>>1;}}context_enlargeIn--;if(context_enlargeIn==0){context_enlargeIn=Math.pow(2,context_numBits);context_numBits++;}context_dictionary[context_wc]=context_dictSize++;context_w=String(context_c);}}if(context_w!==""){if(Object.prototype.hasOwnProperty.call(context_dictionaryToCreate,context_w)){if(context_w.charCodeAt(0)<256){for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}}value=context_w.charCodeAt(0);for(i=0;i<8;i++){context_data_val=(context_data_val<<1)|(value&1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}value=value>>1;}}else{value=1;for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|value;if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}value=0;}value=context_w.charCodeAt(0);for(i=0;i<16;i++){context_data_val=(context_data_val<<1)|(value&1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}value=value>>1;}}context_enlargeIn--;if(context_enlargeIn==0){context_enlargeIn=Math.pow(2,context_numBits);context_numBits++;}delete context_dictionaryToCreate[context_w];}else{value=context_dictionary[context_w];for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|(value&1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}value=value>>1;}}context_enlargeIn--;if(context_enlargeIn==0){context_enlargeIn=Math.pow(2,context_numBits);context_numBits++;}}value=2;for(i=0;i<context_numBits;i++){context_data_val=(context_data_val<<1)|(value&1);if(context_data_position==bitsPerChar-1){context_data_position=0;context_data.push(getCharFromInt(context_data_val));context_data_val=0;}else{context_data_position++;}value=value>>1;}while(true){context_data_val=(context_data_val<<1);if(context_data_position==bitsPerChar-1){context_data.push(getCharFromInt(context_data_val));break;}else context_data_position++;}return context_data.join('');},_decompress:function(length,resetValue,getNextValue){var dictionary=[],next,enlargeIn=4,dictSize=4,numBits=3,entry="",result=[],i,w,bits,resb,maxpower,power,c,data={val:getNextValue(0),position:resetValue,index:1};for(i=0;i<3;i+=1){dictionary[i]=i;}bits=0;maxpower=Math.pow(2,2);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}switch(next=bits){case 0:bits=0;maxpower=Math.pow(2,8);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}c=f(bits);break;case 1:bits=0;maxpower=Math.pow(2,16);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}c=f(bits);break;case 2:return"";}dictionary[3]=c;w=c;result.push(c);while(true){if(data.index>length){return"";}bits=0;maxpower=Math.pow(2,numBits);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}switch(c=bits){case 0:bits=0;maxpower=Math.pow(2,8);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}dictionary[dictSize++]=f(bits);c=dictSize-1;enlargeIn--;break;case 1:bits=0;maxpower=Math.pow(2,16);power=1;while(power!=maxpower){resb=data.val&data.position;data.position>>=1;if(data.position==0){data.position=resetValue;data.val=getNextValue(data.index++);}bits|=(resb>0?1:0)*power;power<<=1;}dictionary[dictSize++]=f(bits);c=dictSize-1;enlargeIn--;break;case 2:return result.join('');}if(enlargeIn==0){enlargeIn=Math.pow(2,numBits);numBits++;}if(dictionary[c]){entry=dictionary[c];}else{if(c===dictSize){entry=w+w.charAt(0);}else{return null;}}result.push(entry);dictionary[dictSize++]=w+entry.charAt(0);enlargeIn--;w=entry;if(enlargeIn==0){enlargeIn=Math.pow(2,numBits);numBits++;}}}};return LZString;})();
+</script>
+
 <!-- ===== Firebase 클라우드 자동저장 모듈 (구글 로그인) ===== -->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
@@ -11437,6 +11443,8 @@ function thinBorder(){
   const db = getFirestore(app);
   const provider = new GoogleAuthProvider();
   const DATA_DOC = doc(db, 'supionm', 'shared_data');
+  const chunkRef = (i)=>doc(db,'supionm','chunk_'+i);
+  const LZ = window.LZString;
 
   let _fbReady=false, _saveTimer=null, _applyingRemote=false;
   window._fbCurrentUser = null;
@@ -11454,17 +11462,53 @@ function thinBorder(){
       Object.keys(ls).forEach(k=>{ if(ls[k]!=null) localStorage.setItem(k,String(ls[k])); });
     }catch(e){ console.error(e); } _applyingRemote=false;
   }
+
+  // ── 클라우드 저장: localStorage 전체 → JSON → 압축(base64). 1MB 문서 한계를 넘지 않도록
+  //    압축하고, 그래도 크면 여러 문서(chunk_0,1,…)로 분할 저장. (예전엔 비압축 단일문서라 1MB 초과 시 저장 실패)
+  const SAFE_CHARS=900000, CHUNK=800000;
+  async function cloudSave(){
+    const json=JSON.stringify(collectLocalData());
+    const z=LZ.compressToBase64(json);
+    const meta={ v:2, updatedAt:Date.now(), updatedBy:(auth.currentUser?auth.currentUser.email:''), rawChars:json.length, zChars:z.length };
+    if(z.length<=SAFE_CHARS){
+      await setDoc(DATA_DOC, Object.assign({chunks:1, z:z}, meta));
+    }else{
+      const n=Math.ceil(z.length/CHUNK);
+      for(let i=0;i<n;i++){ await setDoc(chunkRef(i),{z:z.slice(i*CHUNK,(i+1)*CHUNK)}); }
+      await setDoc(DATA_DOC, Object.assign({chunks:n}, meta)); // 분할 시 본문은 chunk 문서에
+    }
+    return z.length;
+  }
+  // 클라우드 → localStorage 적용용 객체. 신포맷(v2: 압축/분할) + 구포맷({ls}) 모두 지원
+  async function cloudLoadObj(){
+    const snap=await getDoc(DATA_DOC); if(!snap.exists()) return null;
+    const d=snap.data();
+    if(d.v===2){
+      let z='';
+      if(d.chunks && d.chunks>1){ for(let i=0;i<d.chunks;i++){ const cs=await getDoc(chunkRef(i)); z+=(cs.exists()&&cs.data().z)?cs.data().z:''; } }
+      else { z=d.z||''; }
+      if(!z) return null;
+      try{ return JSON.parse(LZ.decompressFromBase64(z)); }catch(e){ console.error('[cloud decompress]',e); return null; }
+    }
+    if(d.ls) return d.ls; // 구버전(9월 이전) 비압축 포맷
+    return null;
+  }
+  function cloudWhen(d){
+    try{ if(d&&d.updatedAt){ const t=new Date(d.updatedAt); return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0')+' '+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0'); } }catch(e){} return '알 수 없음';
+  }
+  function errText(e){ return (e&&e.code)?e.code:((e&&e.message)?e.message:String(e)); }
+
   function scheduleSave(){
     if(!_fbReady||_applyingRemote) return;
     if(_saveTimer) clearTimeout(_saveTimer);
     _saveTimer=setTimeout(async()=>{
-      try{ await setDoc(DATA_DOC,{ls:collectLocalData(),updatedAt:Date.now(),updatedBy:(auth.currentUser?auth.currentUser.email:'')},{merge:false}); showFbStatus('저장됨 ✓','#1a7f37'); }
-      catch(e){ console.error(e); showFbStatus('저장 실패','#c0392b'); }
+      try{ await cloudSave(); showFbStatus('저장됨 ✓','#1a7f37'); }
+      catch(e){ console.error('[cloud save]',e); showFbStatus('저장 실패: '+errText(e),'#c0392b'); }
     },2000);
   }
   function showFbStatus(msg,color){
     let el=document.getElementById('fbStatus');
-    if(!el){ el=document.createElement('div'); el.id='fbStatus'; el.style.cssText='position:fixed;right:14px;bottom:14px;z-index:99999;padding:6px 14px;border-radius:16px;font-size:12px;font-weight:600;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:opacity .3s'; document.body.appendChild(el); }
+    if(!el){ el=document.createElement('div'); el.id='fbStatus'; el.style.cssText='position:fixed;right:14px;bottom:14px;z-index:99999;padding:6px 14px;border-radius:16px;font-size:12px;font-weight:600;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:opacity .3s;max-width:60vw'; document.body.appendChild(el); }
     el.textContent='☁ '+msg; el.style.color=color||'#555'; el.style.opacity='1';
     clearTimeout(el._t); el._t=setTimeout(()=>{el.style.opacity='0.35';},2500);
   }
@@ -11473,22 +11517,21 @@ function thinBorder(){
     if(user){
       _fbReady=true; window._fbCurrentUser={email:user.email,name:user.displayName};
       showFbStatus('연결됨: '+user.email,'#1a7f37');
-      // 최초: 원격 데이터 있으면 불러오기
+      // 최초: 원격 데이터 있으면 안내(저장시각 표시) 후 선택
       try{
         const snap=await getDoc(DATA_DOC);
-        if(snap.exists() && snap.data().ls){
-          const ok=confirm('클라우드에 저장된 데이터가 있습니다.\n\n[확인] 클라우드 데이터 불러오기 (현재 기기 데이터 덮어씀)\n[취소] 현재 기기 데이터 유지 (다음 저장 시 클라우드 갱신)');
-          if(ok){ applyRemoteData(snap.data().ls); location.reload(); return; }
+        if(snap.exists() && (snap.data().ls || snap.data().v===2)){
+          const when=cloudWhen(snap.data());
+          const ok=confirm('클라우드에 저장된 데이터가 있습니다.\n(클라우드 저장시각: '+when+')\n\n[확인] 클라우드 데이터 불러오기 (현재 기기 데이터 덮어씀)\n[취소] 현재 기기 데이터 유지 (다음 저장 시 클라우드 갱신)\n\n※ 현재 기기에 더 최신 데이터가 있으면 반드시 [취소]를 누르세요.');
+          if(ok){ const obj=await cloudLoadObj(); if(obj){ applyRemoteData(obj); location.reload(); return; } else alert('클라우드 데이터를 읽지 못했습니다.'); }
         }
       }catch(e){ console.error(e); }
-      // 실시간 변경 감지
+      // 실시간 변경 감지(다른 기기)
       onSnapshot(DATA_DOC,(snap)=>{
         if(_applyingRemote||snap.metadata.hasPendingWrites) return;
         const d=snap.data();
-        if(d&&d.ls&&d.updatedBy!==(auth.currentUser?auth.currentUser.email:'')) showFbStatus('다른 기기에서 변경됨 - 새로고침 권장','#c47b2c');
+        if(d&&d.updatedBy&&d.updatedBy!==(auth.currentUser?auth.currentUser.email:'')) showFbStatus('다른 기기에서 변경됨 - 새로고침 권장','#c47b2c');
       });
-      // 설정 화면 열려있으면 갱신
-      if(typeof drawImportPane==='function' && document.getElementById('mBody') && document.getElementById('fbGoogleBtn')===null && document.getElementById('fbLogoutBtn')===null){ try{drawImportPane();}catch(e){} }
       if(typeof drawImportPane==='function' && document.getElementById('mBody')){ try{drawImportPane();}catch(e){} }
     } else {
       _fbReady=false; window._fbCurrentUser=null;
@@ -11503,8 +11546,8 @@ function thinBorder(){
   // 전역 함수 (설정 버튼에서 호출)
   window.fbGoogleLogin=async()=>{ try{ await signInWithPopup(auth,provider); }catch(e){ alert('로그인 실패: '+(e.message||e)); } };
   window.fbLogout=()=>{ signOut(auth); showFbStatus('로그아웃됨','#888'); };
-  window.fbSaveNow=async()=>{ if(!_fbReady){alert('먼저 구글 로그인하세요');return;} await setDoc(DATA_DOC,{ls:collectLocalData(),updatedAt:Date.now(),updatedBy:auth.currentUser.email},{merge:false}); showFbStatus('수동 저장됨 ✓','#1a7f37'); alert('클라우드에 저장했습니다.'); };
-  window.fbLoadNow=async()=>{ if(!_fbReady){alert('먼저 구글 로그인하세요');return;} const snap=await getDoc(DATA_DOC); if(snap.exists()&&snap.data().ls){ if(confirm('클라우드 데이터로 현재 기기를 덮어씁니다. 계속할까요?')){ applyRemoteData(snap.data().ls); location.reload(); } } else alert('클라우드에 저장된 데이터가 없습니다.'); };
+  window.fbSaveNow=async()=>{ if(!_fbReady){alert('먼저 구글 로그인하세요');return;} try{ const zl=await cloudSave(); showFbStatus('수동 저장됨 ✓','#1a7f37'); alert('클라우드에 저장했습니다. (압축 '+Math.round(zl/1024)+'KB)'); }catch(e){ console.error(e); showFbStatus('저장 실패','#c0392b'); alert('저장 실패: '+errText(e)); } };
+  window.fbLoadNow=async()=>{ if(!_fbReady){alert('먼저 구글 로그인하세요');return;} try{ const snap=await getDoc(DATA_DOC); if(!snap.exists()||!(snap.data().ls||snap.data().v===2)){ alert('클라우드에 저장된 데이터가 없습니다.'); return; } const when=cloudWhen(snap.data()); if(confirm('클라우드 데이터(저장시각: '+when+')로 현재 기기를 덮어씁니다. 계속할까요?')){ const obj=await cloudLoadObj(); if(obj){ applyRemoteData(obj); location.reload(); } else alert('클라우드 데이터를 읽지 못했습니다.'); } }catch(e){ console.error(e); alert('불러오기 실패: '+errText(e)); } };
 </script>
 
 </body>
