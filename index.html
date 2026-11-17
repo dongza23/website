@@ -1845,22 +1845,29 @@ function startSidebarClock(){
 function cardMemo(){
   const cur = lsGet(LS_MEMO);
   const memoText = (typeof cur === 'string') ? cur : '';
-  return `<div class="card panel">
+  return `<div class="card panel" style="display:flex;flex-direction:column">
     <div class="panel-head"><h3>📝 메모</h3>
       <div style="display:flex;align-items:center;gap:8px">
         <span class="hint" id="memoStat">자동 저장</span>
         <button class="btn ghost" style="height:30px;padding:0 12px;font-size:12px" onclick="openMemoFull()">전체보기</button>
       </div>
     </div>
-    <textarea id="dashMemo" placeholder="떠오르는 생각, 할 일, 메모를 자유롭게 적어두세요..." style="width:100%;min-height:200px;resize:vertical;font:inherit;font-size:13px;line-height:1.55;border:1px solid var(--border);border-radius:7px;padding:10px 12px;background:#fffef7;color:var(--ink);outline:none;box-sizing:border-box">${esc(memoText)}</textarea>
+    <textarea id="dashMemo" placeholder="떠오르는 생각, 할 일, 메모를 자유롭게 적어두세요..." style="width:100%;flex:1 1 auto;min-height:200px;overflow:hidden;resize:none;font:inherit;font-size:13px;line-height:1.55;border:1px solid var(--border);border-radius:7px;padding:10px 12px;background:#fffef7;color:var(--ink);outline:none;box-sizing:border-box">${esc(memoText)}</textarea>
   </div>`;
 }
 function wireMemo(){
   const ta = document.getElementById('dashMemo');
   const stat = document.getElementById('memoStat');
   if(!ta) return;
+  // 입력란을 카드에 맞춰 채우고, 내용이 길면 함께 늘려 스크롤바가 안 생기게
+  // 내용 높이를 정확히 재서(height:auto) 최소높이로 지정 → 카드가 더 크면 flex로 채우고, 내용이 더 길면 카드가 늘어남
+  function fitMemo(){ try{ ta.style.minHeight='0px'; ta.style.height='auto'; const h=ta.scrollHeight; ta.style.height=''; ta.style.minHeight=Math.max(200,h+2)+'px'; }catch(e){} }
+  ta._fitMemo=fitMemo;
+  fitMemo(); setTimeout(fitMemo,0);   // 최초 렌더 후 1회 맞춤
+  if(!window._memoFitBound){ window._memoFitBound=true; window.addEventListener('resize',()=>{ const t=document.getElementById('dashMemo'); if(t&&t._fitMemo)t._fitMemo(); }); }
   let timer = null;
   ta.addEventListener('input', ()=>{
+    fitMemo();
     if(stat) stat.textContent = '입력 중...';
     if(timer) clearTimeout(timer);
     timer = setTimeout(()=>{
@@ -2156,7 +2163,7 @@ function renderDashboard(){
           const today=todayStr();
           const pending = AS.filter(a=>!a.done).sort((a,b)=>(a.d||'').localeCompare(b.d||''));
           if(!pending.length) return '<p class="empty" style="padding:20px 0;text-align:center;color:var(--ink-faint)">예정된 A/S가 없습니다</p>';
-          const show = pending.slice(0,7);
+          const show = pending;   // 전체 표시(건수 제한 없음) → 카드가 내용에 맞춰 늘어남
           return `<div class="tbl-wrap"><table class="tbl compact"><thead><tr>
             <th style="width:90px">일자</th><th>거래처</th><th>내용</th>
           </tr></thead><tbody>
