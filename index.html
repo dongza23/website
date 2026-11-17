@@ -11446,8 +11446,11 @@ window.LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGH
   const chunkRef = (i)=>doc(db,'supionm','chunk_'+i);
   const LZ = window.LZString;
 
-  let _fbReady=false, _saveTimer=null, _applyingRemote=false;
+  let _fbReady=false, _saveTimer=null, _applyingRemote=false, _promptShown=false;
   window._fbCurrentUser = null;
+  // 마지막으로 동기화한 클라우드 저장시각 (sci_ 아님 → 클라우드 동기화·초기화 대상에서 제외)
+  function getLastTs(){ try{ return localStorage.getItem('_fb_last_ts')||''; }catch(e){ return ''; } }
+  function setLastTs(v){ try{ localStorage.setItem('_fb_last_ts', String(v||'')); }catch(e){} }
 
   function collectLocalData(){
     const ls={};
@@ -11477,6 +11480,7 @@ window.LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGH
       for(let i=0;i<n;i++){ await setDoc(chunkRef(i),{z:z.slice(i*CHUNK,(i+1)*CHUNK)}); }
       await setDoc(DATA_DOC, Object.assign({chunks:n}, meta)); // 분할 시 본문은 chunk 문서에
     }
+    setLastTs(meta.updatedAt);   // 방금 저장한 버전 = 현재 기기와 동일 → 재로그인 시 묻지 않음
     return z.length;
   }
   // 클라우드 → localStorage 적용용 객체. 신포맷(v2: 압축/분할) + 구포맷({ls}) 모두 지원
@@ -11488,9 +11492,9 @@ window.LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGH
       if(d.chunks && d.chunks>1){ for(let i=0;i<d.chunks;i++){ const cs=await getDoc(chunkRef(i)); z+=(cs.exists()&&cs.data().z)?cs.data().z:''; } }
       else { z=d.z||''; }
       if(!z) return null;
-      try{ return JSON.parse(LZ.decompressFromBase64(z)); }catch(e){ console.error('[cloud decompress]',e); return null; }
+      try{ const o=JSON.parse(LZ.decompressFromBase64(z)); setLastTs(d.updatedAt); return o; }catch(e){ console.error('[cloud decompress]',e); return null; }
     }
-    if(d.ls) return d.ls; // 구버전(9월 이전) 비압축 포맷
+    if(d.ls){ setLastTs(d.updatedAt); return d.ls; } // 구버전(9월 이전) 비압축 포맷
     return null;
   }
   function cloudWhen(d){
@@ -11517,13 +11521,21 @@ window.LZString=(function(){var f=String.fromCharCode;var keyStrBase64="ABCDEFGH
     if(user){
       _fbReady=true; window._fbCurrentUser={email:user.email,name:user.displayName};
       showFbStatus('연결됨: '+user.email,'#1a7f37');
-      // 최초: 원격 데이터 있으면 안내(저장시각 표시) 후 선택
+      // 원격 데이터 안내: 단, 이 기기가 '이미 동기화한 클라우드 버전'과 같으면 묻지 않음(무한 팝업 방지)
       try{
         const snap=await getDoc(DATA_DOC);
-        if(snap.exists() && (snap.data().ls || snap.data().v===2)){
-          const when=cloudWhen(snap.data());
-          const ok=confirm('클라우드에 저장된 데이터가 있습니다.\n(클라우드 저장시각: '+when+')\n\n[확인] 클라우드 데이터 불러오기 (현재 기기 데이터 덮어씀)\n[취소] 현재 기기 데이터 유지 (다음 저장 시 클라우드 갱신)\n\n※ 현재 기기에 더 최신 데이터가 있으면 반드시 [취소]를 누르세요.');
-          if(ok){ const obj=await cloudLoadObj(); if(obj){ applyRemoteData(obj); location.reload(); return; } else alert('클라우드 데이터를 읽지 못했습니다.'); }
+        const d0=snap.exists()?snap.data():null;
+        if(d0 && (d0.ls || d0.v===2)){
+          const cloudTs=String(d0.updatedAt||'');
+          if(cloudTs && cloudTs===getLastTs()){
+            // 현재 기기 데이터 = 클라우드 최신 버전 → 자동저장만 활성화, 팝업 없음
+          } else if(!_promptShown){
+            _promptShown=true;
+            const when=cloudWhen(d0);
+            const ok=confirm('클라우드에 저장된 데이터가 있습니다.\n(클라우드 저장시각: '+when+')\n\n[확인] 클라우드 데이터 불러오기 (현재 기기 데이터 덮어씀)\n[취소] 현재 기기 데이터 유지 (다음 저장 시 클라우드 갱신)\n\n※ 현재 기기에 더 최신 데이터가 있으면 반드시 [취소]를 누르세요.');
+            if(ok){ const obj=await cloudLoadObj(); if(obj){ applyRemoteData(obj); setLastTs(cloudTs); location.reload(); return; } else alert('클라우드 데이터를 읽지 못했습니다.'); }
+            else { setLastTs(cloudTs); }   // 취소: 이 버전을 확인했다고 기록 → 새로고침해도 다시 묻지 않음
+          }
         }
       }catch(e){ console.error(e); }
       // 실시간 변경 감지(다른 기기)
