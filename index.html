@@ -10266,6 +10266,8 @@ function markBackupDone(){
 function showBackupBannerIfNeeded(){
   const banner=document.getElementById('backupBanner');
   if(!banner)return;
+  // 백업 알림 배너 비활성화 (백업은 수동으로 진행) — 항상 숨김
+  banner.style.display='none'; banner.innerHTML=''; return;
   const st=getBackupState();
   // 잠시 무시(나중에) 중이면 표시 안 함
   if(st._snoozedUntil && Date.now()<st._snoozedUntil){
