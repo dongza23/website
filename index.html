@@ -9974,10 +9974,10 @@ let DOC_SEQ = (()=>{ try{ const s=localStorage.getItem('sci_doc_seq'); const o=s
 function saveDocSeq(){ try{ localStorage.setItem('sci_doc_seq', JSON.stringify(DOC_SEQ)); }catch(e){} }
 function docPrefix(key){ const k=key||(typeof currentCompany!=='undefined'?currentCompany:'supionm'); return k==='mdermalab'?'M':'SPNM'; }
 function _ymd6(dateStr){ const d=dateStr?new Date(dateStr):new Date(); const dd=isNaN(d)?new Date():d; return String(dd.getFullYear()).slice(2)+String(dd.getMonth()+1).padStart(2,'0')+String(dd.getDate()).padStart(2,'0'); }
-function fmtDocNo(seq, dateStr, key){ return docPrefix(key)+'-'+String(seq).padStart(3,'0')+'-'+_ymd6(dateStr); }
+function fmtDocNo(seq, dateStr, key){ return docPrefix(key)+'-'+_ymd6(dateStr)+'-'+String(seq).padStart(3,'0'); }  // 형식: PREFIX-YYMMDD-순번
 // 다음 순번 = 저장된 거래들 중 같은 접두어의 최대 번호 + 1 (데이터 기반 → 삭제/수정에도 안정적)
 // 같은 '작성일자(YYMMDD)'의 거래만 세어 최대 순번 반환 → 날짜가 바뀌면 001부터 다시 시작
-function maxDocSeq(key, dateStr){ const pre=docPrefix(key)+'-'; const suf='-'+_ymd6(dateStr||_docDate()); let mx=0; try{ (USER||[]).forEach(r=>{ if(r.rn && r.rn.indexOf(pre)===0 && r.rn.slice(-suf.length)===suf){ const m=/^[A-Za-z]+-0*(\d+)-/.exec(r.rn); if(m){ const n=parseInt(m[1],10); if(n>mx)mx=n; } } }); }catch(e){} return mx; }
+function maxDocSeq(key, dateStr){ const pre=docPrefix(key)+'-'; const ymd=_ymd6(dateStr||_docDate()); const ep=pre.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); const reNew=new RegExp('^'+ep+ymd+'-0*(\\d+)$'); const reOld=new RegExp('^'+ep+'0*(\\d+)-'+ymd+'$'); let mx=0; try{ (USER||[]).forEach(r=>{ if(!r.rn||r.rn.indexOf(pre)!==0)return; const m=reNew.exec(r.rn)||reOld.exec(r.rn); if(m){ const n=parseInt(m[1],10); if(n>mx)mx=n; } }); }catch(e){} return mx; }  // 신포맷(날짜-순번)·구포맷(순번-날짜) 모두 같은 날짜로 인식
 // 청구번호 날짜부(-YYMMDD)는 작성일자(fDate) 기준
 function _docDate(){ try{ const el=document.getElementById('fDate'); if(el&&el.value) return el.value; }catch(e){} return (typeof entryDraft!=='undefined'&&entryDraft.date)?entryDraft.date:todayStr(); }
 function peekDocNo(dateStr){ const k=(typeof currentCompany!=='undefined'?currentCompany:'supionm'); const d=dateStr||_docDate(); return fmtDocNo(maxDocSeq(k,d)+1, d, k); }     // 다음 번호(작성일자별 001부터)
