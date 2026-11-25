@@ -4351,7 +4351,7 @@ function editCust(nm){
       (rec.fx||[]).forEach(f=>{
         const inm=(f.nm||'').trim(); if(!inm) return;
         if(I.find(x=>x.nm===inm) || UITEM.find(x=>x.nm===inm)) return; // 이미 있으면 건너뜀
-        const it={nm:inm,code:inm,nmEn:'',spec:'기타',unit:'ea',
+        const it={nm:inm,code:inm,nmEn:'',spec:'',unit:'ea',
           stock:(f.stock!=null&&f.stock!=='')?(+f.stock||0):0,
           perf:'',desc:'거래처 고정단가에서 자동 등록',cls:'기타',_u:1};
         ['shop','whole','branch','export','oem'].forEach(b=>{it['p_'+b+'_krw']=0;it['p_'+b+'_usd']=0;});
@@ -6337,7 +6337,13 @@ function drawInForm(){
        <div class="fld"><label>거래처</label><input id="fParty" list="dlParty" value="${isExp?esc(ISSUER.name):esc(entryDraft.party||'')}" placeholder="거래처명 입력/선택"></div>
      </div>
 
-     <div class="fld"><label>${(typeof docKind!=='undefined'&&docKind==='quote')?'견적번호':'청구번호'}</label><input id="fDocNo" value="${esc(entryDraft.docNo || (typeof resolveDocNo==='function'?resolveDocNo():''))}" placeholder="자동생성 (수정 가능)"></div>
+     <div class="fld"><label>${(typeof docKind!=='undefined'&&docKind==='quote')?'견적번호':'청구번호'}</label>
+       <div style="display:flex;gap:6px;align-items:stretch">
+         <input id="fDocNo" style="flex:1;min-width:0" value="${esc(entryDraft.docNo || (typeof resolveDocNo==='function'?resolveDocNo():''))}" placeholder="자동생성 (수정 가능)">
+         <button type="button" class="btn ghost" style="flex:0 0 auto;padding:0 12px;font-size:12px;white-space:nowrap" onclick="checkDocNoDup()">중복확인</button>
+         <button type="button" class="btn" style="flex:0 0 auto;padding:0 12px;font-size:12px;white-space:nowrap" onclick="genDocNo()">생성</button>
+       </div>
+     </div>
 
      ${isExp ? `
      <div class="fld"><label>계정과목</label><input id="fAcct" list="dlAcct" value="" placeholder="계정과목 입력(선택)"></div>
@@ -6827,7 +6833,7 @@ function autoRegisterMasters(party, lines, vatMode){
   (lines||[]).forEach(l=>{
     const nm=l.nm&&l.nm.trim(); if(!nm) return;
     if(I.find(x=>x.nm===nm) || added.items.includes(nm)) return;
-    const it={nm,code:nm,nmEn:'',spec:'기타',unit:l.unit||'ea',stock:0,perf:'',
+    const it={nm,code:nm,nmEn:'',spec:'',unit:l.unit||'ea',stock:0,perf:'',
       desc:'발주에서 자동 등록(기타)',cls:'기타',_u:1};
     ['shop','whole','branch','export','oem'].forEach(b=>{it['p_'+b+'_krw']=0;it['p_'+b+'_usd']=0;});
     if(l.pr) it[fld]=l.pr; // 입력 단가를 거래처 단가유형 칸에 기록
@@ -9980,6 +9986,29 @@ let curDocNo = '';   // 현재 미리보기/문서에 표시할 청구번호
 // 저장된 배치의 번호가 있으면 그걸, 없으면 다음 번호(미리보기)를 반환
 function resolveDocNo(){ try{ if(typeof entryEditBatch!=='undefined' && entryEditBatch){ const r=USER.find(x=>x.batch===entryEditBatch && x.rn); if(r&&r.rn) return r.rn; } }catch(e){} return peekDocNo(); }
 function invRefNo(dateStr){ return curDocNo || resolveDocNo(); }  // 영문 INVOICE Ref.No도 동일 번호 사용
+// 청구번호 중복 확인: 현재 편집 중인 거래는 제외하고 같은 번호를 쓰는 다른 거래가 있는지 검사
+function checkDocNoDup(){
+  const el=document.getElementById('fDocNo'); if(!el) return;
+  const v=(el.value||'').trim();
+  if(!v){ alert('청구번호가 비어 있습니다.'); return; }
+  const curBatch=(typeof entryEditBatch!=='undefined')?entryEditBatch:null;
+  let hits=[]; try{ hits=(USER||[]).filter(r=>r.rn===v && (!curBatch || r.batch!==curBatch)); }catch(e){}
+  const batches=[...new Set(hits.map(r=>r.batch))];
+  if(batches.length){
+    const ex=hits[0]?((hits[0].d||'')+' '+(hits[0].p||'')).trim():'';
+    alert('⚠️ 이미 사용 중인 번호입니다\n\n'+v+'\n('+batches.length+'건 중복'+(ex?' · 예: '+ex:'')+')\n\n오른쪽 [생성] 버튼으로 새 번호를 받으세요.');
+  } else {
+    alert('✅ 사용 가능한 번호입니다\n\n'+v);
+  }
+}
+// 새 번호 생성: 현재 작성일자 기준 다음 번호(=그 날짜의 최대번호+1)로 교체
+function genDocNo(){
+  const el=document.getElementById('fDocNo'); if(!el) return;
+  const nv=(typeof peekDocNo==='function')?peekDocNo():'';
+  el.value=nv;
+  if(typeof entryDraft!=='undefined'){ entryDraft.docNo=nv; entryDraft.docNoManual=false; }
+  if(typeof updateEntryDoc==='function') updateEntryDoc();
+}
 function invDate(dateStr){ const d=new Date(dateStr); if(isNaN(d)) return esc(dateStr||''); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function invoiceDocHTML(cust, dateStr, lines, withId, vatMode, curSym){
   const sym = curSym || (typeof invCurSym==='function' ? invCurSym() : '$');
@@ -9990,7 +10019,7 @@ function invoiceDocHTML(cust, dateStr, lines, withId, vatMode, curSym){
   const body=rows.map(l=>{
     if(l.disc){ const a=l.damt||0; totAmt+=a; discTot+=a; discList.push(l); return ''; }  // 할인은 표 밖으로
     const u=l.q||0, p=isEx?Math.round((l.pr||0)/1.1):(l.pr||0); const a=lineAmt(u,p); totUnits+=u; totPrice+=p; totAmt+=a; subTot+=a;
-    const it=I.find(x=>x.nm===l.nm)||{}; const enNm=it.nmEn||l.nm; const enSpec=it.specEn||l.spec;
+    const it=I.find(x=>x.nm===l.nm)||{}; const enNm=it.nmEn||l.nm; let enSpec=it.specEn||l.spec; if(enSpec==='기타') enSpec='';  // 자동등록 기본값 '기타'는 규격 표시에서 제외
     return '<tr><td class="i-item">'+esc(enNm)+(enSpec?' <span class="i-spec">('+esc(enSpec)+')</span>':'')+(l.bigo?' <span class="i-spec">'+esc(l.bigo)+'</span>':'')+'</td>'+
       '<td class="i-c">'+(u?fmt(u):'')+'</td><td class="i-cur"><span class="i-cs">'+sym+'</span>'+fmt(p)+'</td><td class="i-cur"><span class="i-cs">'+sym+'</span>'+fmt(a)+'</td></tr>';}).join('');
   const blanks=Math.max(rows.length?1:6, 12-rows.length); let pad='';
