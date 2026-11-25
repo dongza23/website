@@ -2364,7 +2364,7 @@ function drawTxControls(){
     <div class="card panel" style="margin-bottom:16px">
       <div class="filters">
         <div class="search-wrap field grow">${svg(IC.search)}
-          <input class="input" id="txq" placeholder="거래처 · 품명 · 적요 검색" value="${esc(txState.q)}"></div>
+          <input class="input" id="txq" placeholder="거래처 · 품명 · 적요 · 청구번호 검색" value="${esc(txState.q)}"></div>
         <div class="field"><label>연도</label>
           <select class="select" id="txyear"><option value="">전체 연도</option>${ys.map(y=>`<option value="${y}" ${txState.year===y?'selected':''}>${y}년</option>`).join('')}</select></div>
         <div class="field"><label>월</label>
@@ -2438,7 +2438,7 @@ function filterTx(){
     if(txState.cls==='비용' && txState.acct && t.a!==txState.acct)return false;
     if(txState.year && (t.d||'').slice(0,4)!==txState.year)return false;
     if(txState.month && monthOf(t.d)!==txState.month)return false;
-    if(q&&!((t.p+t.inm+t.m+t.a).toLowerCase().includes(q)))return false;
+    if(q&&!((t.p+t.inm+t.m+t.a+(t.rn||'')).toLowerCase().includes(q)))return false;  // 청구번호(rn)도 검색 대상
     return true;
   }).sort((a,b)=>{
     // 일자 내림차순(최근 일자 위). 같은 일자: 최근 입력 건이 위,
