@@ -5858,7 +5858,11 @@ async function saveEntryDocBoth(excelOnly){
   const pdfName = entryDocName();
   const fn = pdfName + '.xlsx'; // 엑셀 파일명도 PDF와 동일 로직(견적서/INVOICE/PROFORMA/거래명세서)
   if(!excelOnly){ try{ document.title = pdfName; }catch(e){} }
-  // 1) 저장 위치 먼저 묻기 — 사용자 제스처 유지를 위해 가장 먼저 호출
+  // 모바일 여부: 터치 기기/좁은 화면. 모바일은 async(엑셀) 처리 뒤 window.print()가 차단되므로
+  // 인쇄(PDF)를 '버튼 탭 제스처'에서 먼저 실행해야 인쇄창이 뜬다.
+  const _isMobile = ((navigator.maxTouchPoints||0)>0) || (window.matchMedia&&window.matchMedia('(pointer:coarse)').matches) || window.innerWidth<860;
+  if(!excelOnly && _isMobile){ try{ if(ensureEntryDoc()) printDoc(pdfName); }catch(e){} }
+  // 1) 저장 위치 먼저 묻기 — 사용자 제스처 유지를 위해 가장 먼저 호출 (데스크톱 전용)
   let handle=null;
   if(window.showSaveFilePicker){
     try{
@@ -6156,7 +6160,9 @@ async function saveEntryDocBoth(excelOnly){
     else { const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=fn; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500); }
   }catch(e){ alert('엑셀 저장 실패: '+(e&&e.message||e)); }
   // 3) PDF (인쇄 대화상자에서 “PDF로 저장” 선택) — '엑셀만'이면 생략
+  //    모바일은 위에서 이미 인쇄를 띄웠으므로 생략, 데스크톱만 엑셀 저장 후 인쇄
   if(excelOnly) return;
+  if(_isMobile) return;
   if(!ensureEntryDoc())return;
   setTimeout(()=>printDoc(pdfName), 400);
 }
